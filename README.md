@@ -6,7 +6,7 @@ geneRelate enables researchers to map orthologs, explore protein-protein interac
 
 **A live demo can be accessed through the link in the repository description.**
 
----
+
 
 ## Features
 
