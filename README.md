@@ -4,7 +4,7 @@
 
 geneRelate enables researchers to map orthologs, explore protein-protein interactions, and perform functional enrichment analysis across 20 *Fusarium* species — entirely in the browser with no backend server required.
 
-**[Live Demo](https://tunabirgun.github.io/geneRelate/)**
+**A live demo can be accessed through the link in the repository description.**
 
 ---
 
