@@ -260,11 +260,13 @@ function renderTreeSVG(root, opts) {
     const queryGenes = opts.queryGenes || new Set();
     const targetSpecies = opts.targetSpecies || new Set();
     const getSpeciesName = opts.getSpeciesName || (() => '');
+    const memberNames = opts.memberNames || {};
 
     const theme = document.documentElement.getAttribute('data-theme');
     const isDark = theme === 'dark';
     const textColor = isDark ? '#d4d4d4' : '#1a1a1a';
     const textMuted = isDark ? '#888888' : '#666666';
+    const supportColor = isDark ? '#7c7c7c' : '#999999';
     const branchColor = isDark ? '#666666' : '#888888';
     const bgColor = isDark ? '#1a1a1a' : '#ffffff';
     const queryColor = isDark ? '#ff8787' : '#c92a2a';
@@ -273,9 +275,13 @@ function renderTreeSVG(root, opts) {
 
     const useBL = hasBranchLengths(root);
     const leafCount = countLeaves(root);
-    const leafH = 22;
-    const margin = { top: 40, right: 200, bottom: 30, left: 20 };
-    const plotW = Math.max(200, Math.min(400, leafCount * 30));
+
+    // Adaptive spacing: denser for large trees
+    const leafH = leafCount > 80 ? 16 : leafCount > 40 ? 18 : 22;
+    const fontSize = leafCount > 80 ? '8px' : leafCount > 40 ? '9px' : '10px';
+
+    const margin = { top: 40, right: 220, bottom: 30, left: 20 };
+    const plotW = Math.max(200, Math.min(500, leafCount * 25));
     const plotH = leafCount * leafH;
     const width = margin.left + plotW + margin.right;
     const height = margin.top + plotH + margin.bottom;
@@ -299,9 +305,7 @@ function renderTreeSVG(root, opts) {
         if (entry.node === root) continue;
         const { x, y, parentX, parentY } = entry;
         if (parentX === null || parentX === undefined) continue;
-        // Horizontal line from parent x to node x at node y
         _addLine(g, parentX, y, x, y, branchColor, 1.2);
-        // Vertical line from parentY to nodeY at parentX
         _addLine(g, parentX, parentY, parentX, y, branchColor, 1.2);
     }
 
@@ -329,13 +333,16 @@ function renderTreeSVG(root, opts) {
             // Label: preferred name + species
             const spName = getSpeciesName(speciesTaxid);
             const shortId = geneName.includes('.') ? geneName.split('.').slice(1).join('.') : geneName;
-            const label = spName ? `${shortId} (${spName})` : shortId;
+            const prefName = memberNames[geneName];
+            // Show preferred name before the ID when available
+            const label = prefName
+                ? (spName ? `${prefName} | ${shortId} (${spName})` : `${prefName} | ${shortId}`)
+                : (spName ? `${shortId} (${spName})` : shortId);
 
             const textEl = _addText(g, x + 8, y, label, {
-                size: '10px', fill: textColor, baseline: 'middle'
+                size: fontSize, fill: textColor, baseline: 'middle'
             });
 
-            // Italicize species name portion by using bold for gene ID
             if (queryGenes.has(geneName)) {
                 textEl.setAttribute('font-weight', '700');
                 textEl.setAttribute('fill', queryColor);
@@ -345,6 +352,24 @@ function renderTreeSVG(root, opts) {
         } else {
             // Internal node: small dot
             _addCircle(g, x, y, 2, branchColor);
+
+            // Show bootstrap/support values if node name is numeric
+            if (geneName) {
+                const support = parseFloat(geneName);
+                if (!isNaN(support)) {
+                    // Show values that look like bootstrap (0-1 or 0-100)
+                    const displayVal = support <= 1
+                        ? (support * 100).toFixed(0)
+                        : Math.round(support).toString();
+                    // Only show meaningful support values (>= 50%)
+                    const threshold = support <= 1 ? 0.5 : 50;
+                    if (support >= threshold) {
+                        _addText(g, x + 3, y - 5, displayVal, {
+                            size: '7px', fill: supportColor, anchor: 'start'
+                        });
+                    }
+                }
+            }
         }
     }
 
@@ -508,6 +533,12 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
 
         html += '</div>';
 
+        // Build member name mapping for better tip labels
+        var memberNameMap = {};
+        for (var mi = 0; mi < members.length; mi++) {
+            if (members[mi].name) memberNameMap[members[mi].gene] = members[mi].name;
+        }
+
         // Queue tree rendering
         if (newick) {
             treeElements.push({
@@ -518,6 +549,7 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
                 queryGenes: new Set([matchedId]),
                 targetSpecies: targetSet,
                 getSpeciesName: getSpeciesName,
+                memberNames: memberNameMap,
                 title: ogId + ' Gene Tree'
             });
         }
@@ -542,10 +574,25 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
             continue;
         }
 
+        const tipCount = countLeaves(tree);
+
+        // Large tree warning: 200+ tips are impractical to render in-browser
+        if (tipCount > 200) {
+            treeContainer.innerHTML = '<div class="phylo-large-tree-notice">'
+                + '<p><strong>' + tipCount + ' tips</strong> — this tree is too large for in-browser rendering.</p>'
+                + '<p>Download the tree in Newick, NEXUS, or PhyloXML format and open it in a dedicated viewer '
+                + 'such as <a href="https://itol.embl.de" target="_blank" rel="noopener">iTOL</a>, '
+                + '<a href="http://tree.bio.ed.ac.uk/software/figtree/" target="_blank" rel="noopener">FigTree</a>, '
+                + 'or <a href="https://uni-tuebingen.de/fakultaeten/mathematisch-naturwissenschaftliche-fakultaet/fachbereiche/informatik/lehrstuehle/algorithms-in-bioinformatics/software/dendroscope/" target="_blank" rel="noopener">Dendroscope</a>.</p>'
+                + '</div>';
+            continue;
+        }
+
         const svg = renderTreeSVG(tree, {
             queryGenes: te.queryGenes,
             targetSpecies: te.targetSpecies,
             getSpeciesName: te.getSpeciesName,
+            memberNames: te.memberNames,
             title: te.title
         });
 

@@ -877,6 +877,76 @@ body {
   font-style: italic;
 }
 
+/* ================= GENE NAVIGATION ================= */
+.gene-nav {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1.2rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  flex-wrap: wrap;
+}
+
+.gene-nav-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.gene-pill {
+  font-family: var(--font-main);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.gene-pill:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.gene-pill.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.gene-filter-input {
+  font-family: var(--font-main);
+  font-size: 0.82rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  outline: none;
+  width: 160px;
+  transition: border var(--transition), box-shadow var(--transition);
+}
+
+.gene-filter-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+.gene-filter-input::placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* ================= PHYLOGENY ================= */
 .phylo-tree-container {
   overflow-x: auto;
@@ -901,6 +971,27 @@ body {
 .tag-phylo {
   background: var(--accent-subtle);
   color: var(--accent);
+}
+
+.phylo-large-tree-notice {
+  padding: 1.5rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.phylo-large-tree-notice a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.phylo-large-tree-notice a:hover {
+  border-bottom-color: var(--accent);
 }
 
 /* ================= ANIMATIONS ================= */

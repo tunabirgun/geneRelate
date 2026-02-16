@@ -214,6 +214,96 @@ function notFoundSummary(resolvedGenes) {
     return `<div class="not-found-summary">Not found in source species: ${esc(missing.join(', '))}</div>`;
 }
 
+// ===== Gene Navigation (pills + search) =====
+/**
+ * Add gene navigation pills + search/filter bar to any per-gene result tab.
+ * Works on Aliases, PPI, GO, KEGG, and Phylogeny tabs.
+ * Reads gene names from .result-gene-badge elements inside .result-section divs.
+ */
+function addGeneNavigation(containerSel) {
+    const container = document.querySelector(containerSel);
+    if (!container) return;
+
+    // Remove existing nav if re-rendering
+    const existingNav = container.querySelector('.gene-nav');
+    if (existingNav) existingNav.remove();
+
+    const sections = container.querySelectorAll('.result-section');
+    if (sections.length === 0) return;
+
+    // Tag each section with data-gene from the badge text
+    sections.forEach(section => {
+        const badge = section.querySelector('.result-gene-badge');
+        if (badge) section.dataset.gene = badge.textContent.trim();
+    });
+
+    // Collect unique gene names preserving order
+    const geneNames = [];
+    sections.forEach(s => {
+        const g = s.dataset.gene;
+        if (g && !geneNames.includes(g)) geneNames.push(g);
+    });
+
+    if (geneNames.length <= 1 && sections.length <= 1) return;
+
+    // Build nav bar
+    const nav = document.createElement('div');
+    nav.className = 'gene-nav';
+
+    let html = '<div class="gene-nav-pills">';
+    html += `<button class="gene-pill active" data-gene-filter="all">All (${geneNames.length})</button>`;
+    for (const gene of geneNames) {
+        html += `<button class="gene-pill" data-gene-filter="${esc(gene)}">${esc(gene)}</button>`;
+    }
+    html += '</div>';
+    html += '<input type="text" class="gene-filter-input" placeholder="Search results..." />';
+
+    nav.innerHTML = html;
+    container.insertBefore(nav, container.firstChild);
+
+    // Gene pill click handlers
+    const pills = nav.querySelectorAll('.gene-pill');
+    const searchInput = nav.querySelector('.gene-filter-input');
+
+    pills.forEach(pill => {
+        pill.addEventListener('click', () => {
+            pills.forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+
+            const filter = pill.dataset.geneFilter;
+            sections.forEach(section => {
+                section.hidden = (filter !== 'all' && section.dataset.gene !== filter);
+            });
+
+            // Re-apply search filter
+            applySearchFilter(container, searchInput.value);
+        });
+    });
+
+    // Search filter
+    searchInput.addEventListener('input', () => {
+        applySearchFilter(container, searchInput.value);
+    });
+}
+
+function applySearchFilter(container, query) {
+    query = (query || '').toLowerCase().trim();
+    const sections = container.querySelectorAll('.result-section:not([hidden])');
+
+    sections.forEach(section => {
+        const rows = section.querySelectorAll('tbody tr');
+        if (rows.length === 0) return;
+
+        rows.forEach(row => {
+            if (!query) {
+                row.style.display = '';
+            } else {
+                row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
+            }
+        });
+    });
+}
+
 // ===== Lazy Phylogeny Loading =====
 async function loadPhylogenyData() {
     if (state.phylogenyData) return state.phylogenyData;
@@ -298,6 +388,7 @@ async function runAnalysis() {
         showLoading('Loading phylogeny data...');
         await loadPhylogenyData();
         window.Phylogeny.buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, state.phylogenyData);
+        addGeneNavigation('#tab-phylogeny');
 
         hideLoading();
         els.resultsPlaceholder.hidden = true;
@@ -376,6 +467,7 @@ function buildAliasResults(resolvedGenes, sourceTaxid, targetTaxids) {
     html += notFoundSummary(resolvedGenes);
     container.innerHTML = html || '<p class="no-data">No alias results.</p>';
     container.querySelectorAll('table').forEach(makeTableSortable);
+    addGeneNavigation('#tab-aliases');
 }
 
 // ===== PPI Results =====
@@ -434,6 +526,7 @@ function buildPPIResults(resolvedGenes, sourceTaxid) {
     html += notFoundSummary(resolvedGenes);
     container.innerHTML = html || '<p class="no-data">No PPI results.</p>';
     container.querySelectorAll('table').forEach(makeTableSortable);
+    addGeneNavigation('#tab-ppi');
 }
 
 // ===== PPI Network Visualization =====
@@ -570,6 +663,7 @@ function buildGOResults(resolvedGenes, sourceTaxid) {
     html += notFoundSummary(resolvedGenes);
     container.innerHTML = html || '<p class="no-data">No GO results.</p>';
     container.querySelectorAll('table').forEach(makeTableSortable);
+    addGeneNavigation('#tab-go');
 }
 
 // ===== KEGG Results =====
@@ -667,6 +761,7 @@ function buildKEGGResults(resolvedGenes, sourceTaxid) {
 
     container.innerHTML = html;
     container.querySelectorAll('table').forEach(makeTableSortable);
+    addGeneNavigation('#tab-kegg');
 }
 
 // ===== Enrichment Tab Builder =====
@@ -929,6 +1024,7 @@ function initTheme() {
         if (state.phylogenyData && !els.resultsContent.hidden) {
             const resolvedGenes = state.genes.map(g => ({ query: g, proteinId: resolveGene(g, state.sourceSpecies) }));
             window.Phylogeny.buildPhylogenyTab(resolvedGenes, state.sourceSpecies, state.targetSpecies, state.phylogenyData);
+            addGeneNavigation('#tab-phylogeny');
         }
     });
 }
