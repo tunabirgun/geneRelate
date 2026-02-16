@@ -214,6 +214,27 @@ function notFoundSummary(resolvedGenes) {
     return `<div class="not-found-summary">Not found in source species: ${esc(missing.join(', '))}</div>`;
 }
 
+// ===== Lazy Phylogeny Loading =====
+async function loadPhylogenyData() {
+    if (state.phylogenyData) return state.phylogenyData;
+    if (state._phyloLoadFailed) return null;
+
+    const [orthogroups, trees, meta] = await Promise.all([
+        fetchJSON('data/phylogeny/orthogroups.json'),
+        fetchJSON('data/phylogeny/trees.json'),
+        fetchJSON('data/phylogeny/metadata.json'),
+    ]);
+
+    if (orthogroups && trees) {
+        state.phylogenyData = { orthogroups, trees, metadata: meta };
+        renderDBVersions();
+        return state.phylogenyData;
+    }
+
+    state._phyloLoadFailed = true;
+    return null;
+}
+
 // ===== Analysis =====
 async function runAnalysis() {
     const sourceTaxid = els.sourceSelect.value;
@@ -273,10 +294,10 @@ async function runAnalysis() {
         state.keggEnrichmentResults = keggResult;
         buildEnrichmentTab('kegg', keggResult, sourceTaxid);
 
-        // Phylogeny
-        if (state.phylogenyData) {
-            window.Phylogeny.buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, state.phylogenyData);
-        }
+        // Phylogeny (lazy-load data on first use)
+        showLoading('Loading phylogeny data...');
+        await loadPhylogenyData();
+        window.Phylogeny.buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, state.phylogenyData);
 
         hideLoading();
         els.resultsPlaceholder.hidden = true;
@@ -916,12 +937,9 @@ function initTheme() {
 async function init() {
     initTheme();
 
-    const [speciesList, metadata, phyloOrthogroups, phyloTrees, phyloMeta] = await Promise.all([
+    const [speciesList, metadata] = await Promise.all([
         fetchJSON('data/species.json'),
         fetchJSON('data/metadata.json'),
-        fetchJSON('data/phylogeny/orthogroups.json'),
-        fetchJSON('data/phylogeny/trees.json'),
-        fetchJSON('data/phylogeny/metadata.json'),
     ]);
 
     if (!speciesList) {
@@ -931,10 +949,6 @@ async function init() {
 
     state.speciesList = speciesList;
     state.metadata = metadata;
-
-    if (phyloOrthogroups && phyloTrees) {
-        state.phylogenyData = { orthogroups: phyloOrthogroups, trees: phyloTrees, metadata: phyloMeta };
-    }
 
     els.sourceSelect.innerHTML = '<option value="">— Select a species —</option>';
     for (const sp of speciesList) {
