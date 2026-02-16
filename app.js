@@ -214,11 +214,12 @@ function notFoundSummary(resolvedGenes) {
     return `<div class="not-found-summary">Not found in source species: ${esc(missing.join(', '))}</div>`;
 }
 
-// ===== Gene Navigation (pills + search) =====
+// ===== Gene Navigation (pills or dropdown + search) =====
 /**
- * Add gene navigation pills + search/filter bar to any per-gene result tab.
- * Works on Aliases, PPI, GO, KEGG, and Phylogeny tabs.
- * Reads gene names from .result-gene-badge elements inside .result-section divs.
+ * Add gene navigation to any per-gene result tab.
+ * <= 8 genes: compact pill buttons
+ * > 8 genes: dropdown select + prev/next arrows
+ * Always includes a search/filter input.
  */
 function addGeneNavigation(containerSel) {
     const container = document.querySelector(containerSel);
@@ -246,39 +247,75 @@ function addGeneNavigation(containerSel) {
 
     if (geneNames.length <= 1 && sections.length <= 1) return;
 
-    // Build nav bar
     const nav = document.createElement('div');
     nav.className = 'gene-nav';
+    let html = '';
 
-    let html = '<div class="gene-nav-pills">';
-    html += `<button class="gene-pill active" data-gene-filter="all">All (${geneNames.length})</button>`;
-    for (const gene of geneNames) {
-        html += `<button class="gene-pill" data-gene-filter="${esc(gene)}">${esc(gene)}</button>`;
+    const useDropdown = geneNames.length > 8;
+
+    if (useDropdown) {
+        // Compact dropdown mode
+        html += '<div class="gene-nav-compact">';
+        html += `<span class="gene-nav-label">Gene:</span>`;
+        html += `<select class="gene-nav-select">`;
+        html += `<option value="all">All (${geneNames.length})</option>`;
+        for (const gene of geneNames) {
+            html += `<option value="${esc(gene)}">${esc(gene)}</option>`;
+        }
+        html += `</select>`;
+        html += `<button class="gene-nav-arrow" data-dir="prev" title="Previous gene">&#8249;</button>`;
+        html += `<button class="gene-nav-arrow" data-dir="next" title="Next gene">&#8250;</button>`;
+        html += '</div>';
+    } else {
+        // Pill mode for small gene sets
+        html += '<div class="gene-nav-pills">';
+        html += `<button class="gene-pill active" data-gene-filter="all">All (${geneNames.length})</button>`;
+        for (const gene of geneNames) {
+            html += `<button class="gene-pill" data-gene-filter="${esc(gene)}">${esc(gene)}</button>`;
+        }
+        html += '</div>';
     }
-    html += '</div>';
+
     html += '<input type="text" class="gene-filter-input" placeholder="Search results..." />';
 
     nav.innerHTML = html;
     container.insertBefore(nav, container.firstChild);
 
-    // Gene pill click handlers
-    const pills = nav.querySelectorAll('.gene-pill');
     const searchInput = nav.querySelector('.gene-filter-input');
 
-    pills.forEach(pill => {
-        pill.addEventListener('click', () => {
-            pills.forEach(p => p.classList.remove('active'));
-            pill.classList.add('active');
-
-            const filter = pill.dataset.geneFilter;
-            sections.forEach(section => {
-                section.hidden = (filter !== 'all' && section.dataset.gene !== filter);
-            });
-
-            // Re-apply search filter
-            applySearchFilter(container, searchInput.value);
+    // Shared filter function
+    function filterToGene(geneName) {
+        sections.forEach(section => {
+            section.hidden = (geneName !== 'all' && section.dataset.gene !== geneName);
         });
-    });
+        applySearchFilter(container, searchInput.value);
+    }
+
+    if (useDropdown) {
+        const select = nav.querySelector('.gene-nav-select');
+        select.addEventListener('change', () => filterToGene(select.value));
+
+        // Prev/Next arrows
+        nav.querySelectorAll('.gene-nav-arrow').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const allOpts = ['all', ...geneNames];
+                const curIdx = allOpts.indexOf(select.value);
+                const dir = btn.dataset.dir === 'prev' ? -1 : 1;
+                const nextIdx = (curIdx + dir + allOpts.length) % allOpts.length;
+                select.value = allOpts[nextIdx];
+                filterToGene(select.value);
+            });
+        });
+    } else {
+        const pills = nav.querySelectorAll('.gene-pill');
+        pills.forEach(pill => {
+            pill.addEventListener('click', () => {
+                pills.forEach(p => p.classList.remove('active'));
+                pill.classList.add('active');
+                filterToGene(pill.dataset.geneFilter);
+            });
+        });
+    }
 
     // Search filter
     searchInput.addEventListener('input', () => {

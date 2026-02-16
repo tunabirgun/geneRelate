@@ -880,29 +880,30 @@ body {
 /* ================= GENE NAVIGATION ================= */
 .gene-nav {
   display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  margin-bottom: 1.2rem;
-  padding: 0.6rem 0.8rem;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  padding: 0.45rem 0.7rem;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   flex-wrap: wrap;
 }
 
+/* Pill mode (few genes) */
 .gene-nav-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem;
+  gap: 0.25rem;
   flex: 1;
   min-width: 0;
 }
 
 .gene-pill {
   font-family: var(--font-main);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 500;
-  padding: 0.25rem 0.6rem;
+  padding: 0.2rem 0.55rem;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: transparent;
@@ -924,16 +925,72 @@ body {
   border-color: var(--accent);
 }
 
-.gene-filter-input {
+/* Dropdown mode (many genes) */
+.gene-nav-compact {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.gene-nav-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.gene-nav-select {
   font-family: var(--font-main);
   font-size: 0.82rem;
-  padding: 0.25rem 0.6rem;
+  padding: 0.2rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-panel);
   color: var(--text);
   outline: none;
-  width: 160px;
+  max-width: 200px;
+  cursor: pointer;
+}
+
+.gene-nav-select:focus {
+  border-color: var(--border-focus);
+}
+
+.gene-nav-select option {
+  background: var(--bg-panel);
+  color: var(--text);
+}
+
+.gene-nav-arrow {
+  font-family: var(--font-main);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.gene-nav-arrow:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* Search input (shared) */
+.gene-filter-input {
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  outline: none;
+  width: 150px;
+  margin-left: auto;
   transition: border var(--transition), box-shadow var(--transition);
 }
 

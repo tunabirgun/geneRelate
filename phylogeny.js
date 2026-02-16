@@ -280,7 +280,7 @@ function renderTreeSVG(root, opts) {
     const leafH = leafCount > 80 ? 16 : leafCount > 40 ? 18 : 22;
     const fontSize = leafCount > 80 ? '8px' : leafCount > 40 ? '9px' : '10px';
 
-    const margin = { top: 40, right: 220, bottom: 30, left: 20 };
+    const margin = { top: 40, right: 220, bottom: 50, left: 20 };
     const plotW = Math.max(200, Math.min(500, leafCount * 25));
     const plotH = leafCount * leafH;
     const width = margin.left + plotW + margin.right;
@@ -379,12 +379,13 @@ function renderTreeSVG(root, opts) {
         if (totalD > 0) {
             const barLen = totalD * 0.2;
             const barPx = (barLen / totalD) * plotW;
-            const barY = plotH + 18;
-            _addLine(g, 0, barY, barPx, barY, textColor, 1.5);
-            _addLine(g, 0, barY - 3, 0, barY + 3, textColor, 1);
-            _addLine(g, barPx, barY - 3, barPx, barY + 3, textColor, 1);
-            _addText(g, barPx / 2, barY + 14, barLen.toFixed(3), {
-                size: '9px', fill: textMuted, anchor: 'middle'
+            const barY = plotH + 20;
+            const scaleColor = isDark ? '#b0b0b0' : '#333333';
+            _addLine(g, 0, barY, barPx, barY, scaleColor, 2);
+            _addLine(g, 0, barY - 4, 0, barY + 4, scaleColor, 1.5);
+            _addLine(g, barPx, barY - 4, barPx, barY + 4, scaleColor, 1.5);
+            _addText(g, barPx / 2, barY + 16, barLen.toFixed(3), {
+                size: '10px', fill: scaleColor, anchor: 'middle', weight: '500'
             });
         }
     }
