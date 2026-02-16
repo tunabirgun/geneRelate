@@ -364,8 +364,9 @@ function renderTreeSVG(root, opts) {
                     // Only show meaningful support values (>= 50%)
                     const threshold = support <= 1 ? 0.5 : 50;
                     if (support >= threshold) {
-                        _addText(g, x + 3, y - 5, displayVal, {
-                            size: '7px', fill: supportColor, anchor: 'start'
+                        // Position above-left of junction to avoid branch overlap
+                        _addText(g, x - 4, y - 8, displayVal, {
+                            size: '7px', fill: supportColor, anchor: 'end'
                         });
                     }
                 }
