@@ -33,11 +33,13 @@ function lfact(n) {
  */
 function hypergeomPValue(k, n, K, N) {
     if (k <= 0 || n <= 0 || K <= 0 || N <= 0) return 1;
+    if (n > N || K > N) return 1;
     if (k > Math.min(n, K)) return 0;
 
     let pval = 0;
+    const minI = Math.max(k, n - (N - K), 0);
     const maxI = Math.min(n, K);
-    for (let i = k; i <= maxI; i++) {
+    for (let i = minI; i <= maxI; i++) {
         const lp = lfact(K) - lfact(i) - lfact(K - i)
             + lfact(N - K) - lfact(n - i) - lfact(N - K - n + i)
             - lfact(N) + lfact(n) + lfact(N - n);
@@ -87,10 +89,13 @@ function runGOEnrichment(queryProteinIds, goData, categoryFilter) {
     // Build term -> set of background proteins
     const termBg = {}; // term -> { desc, category, proteins: Set }
     for (const [pid, terms] of Object.entries(goData)) {
+        if (!Array.isArray(terms)) continue;
         for (const t of terms) {
-            if (categoryFilter && !t.category.includes(categoryFilter)) continue;
+            if (!t || !t.term) continue;
+            const category = t.category || 'Unknown';
+            if (categoryFilter && !category.includes(categoryFilter)) continue;
             if (!termBg[t.term]) {
-                termBg[t.term] = { desc: t.description, category: t.category, proteins: new Set() };
+                termBg[t.term] = { desc: t.description || '', category, proteins: new Set() };
             }
             termBg[t.term].proteins.add(pid);
         }
@@ -176,6 +181,7 @@ function runKEGGEnrichment(queryProteinIds, keggPathwayData, aliasData, infoData
     // Build pathway -> set of background genes
     const pathwayBg = {};
     for (const [gene, pathways] of Object.entries(genePathways)) {
+        if (!Array.isArray(pathways)) continue;
         for (const pw of pathways) {
             if (!pathwayBg[pw]) {
                 const lookup = pw.replace(/^path:/, '');
@@ -219,6 +225,14 @@ function runKEGGEnrichment(queryProteinIds, keggPathwayData, aliasData, infoData
                 if (keggGeneSet.has(upper)) {
                     queryGeneNames.add(upper);
                     pidToKegg[pid] = upper;
+                    found = true;
+                    break;
+                }
+                // Also try lowercase version
+                const lower = alias.toLowerCase();
+                if (keggGeneSet.has(lower)) {
+                    queryGeneNames.add(lower);
+                    pidToKegg[pid] = lower;
                     found = true;
                     break;
                 }

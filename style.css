@@ -877,6 +877,32 @@ body {
   font-style: italic;
 }
 
+/* ================= PHYLOGENY ================= */
+.phylo-tree-container {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.phylo-tree-container svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.phylo-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.tag-phylo {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
 /* ================= ANIMATIONS ================= */
 @keyframes fadeIn {
   from {

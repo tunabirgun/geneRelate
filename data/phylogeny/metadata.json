@@ -1,0 +1,20 @@
+{
+  "source": "STRING + eggNOG",
+  "string_version": "v12.0",
+  "eggnog_version": "5.0",
+  "taxonomy_level": "4751",
+  "taxonomy_name": "Fungi",
+  "description": "Orthologous groups from STRING/eggNOG hierarchical orthology at the Fungi level, with pre-computed gene trees from eggNOG v5.0",
+  "tree_method": "eggNOG v5.0 pre-computed gene trees (species tree reconciliation + ML inference)",
+  "species_count": 20,
+  "orthogroup_count": 14952,
+  "gene_count": 257283,
+  "tree_count": 9524,
+  "version": "1.0.0",
+  "generated_date": "2026-02-16",
+  "url": "https://string-db.org / http://eggnog5.embl.de",
+  "citations": [
+    "Szklarczyk, D., et al. (2023). The STRING database in 2023. Nucleic Acids Research, 51(D1), D483-D489. https://doi.org/10.1093/nar/gkac1000",
+    "Huerta-Cepas, J., et al. (2019). eggNOG 5.0: a hierarchical, functionally and phylogenetically annotated orthology resource. Nucleic Acids Research, 47(D1), D309-D314. https://doi.org/10.1093/nar/gky1085"
+  ]
+}

@@ -16,7 +16,9 @@ const state = {
     goEnrichmentResults: null,
     keggEnrichmentResults: null,
     enrichmentPlotType: 'bar',
+    phylogenyData: null,
 };
+window.state = state;
 
 // ===== DOM Elements =====
 const $ = (sel) => document.querySelector(sel);
@@ -42,9 +44,17 @@ const els = {
 
 // ===== Data Loading =====
 async function fetchJSON(path) {
-    const resp = await fetch(path);
-    if (!resp.ok) return null;
-    return resp.json();
+    try {
+        const resp = await fetch(path);
+        if (!resp.ok) {
+            console.warn(`Failed to load ${path}: HTTP ${resp.status}`);
+            return null;
+        }
+        return await resp.json();
+    } catch (err) {
+        console.warn(`Failed to load ${path}:`, err);
+        return null;
+    }
 }
 
 async function loadSpeciesData(taxid) {
@@ -63,7 +73,16 @@ async function loadSpeciesData(taxid) {
         fetchJSON(`${base}/other_terms.json`),
     ]);
 
-    state.cache[taxid] = { aliases, nameLookup, ppi, info, go, kegg, keggPathways, otherTerms };
+    state.cache[taxid] = {
+        aliases: aliases || {},
+        nameLookup: nameLookup || {},
+        ppi: ppi || {},
+        info: info || {},
+        go: go || {},
+        kegg: kegg || {},
+        keggPathways: keggPathways || { pathways: {}, gene_pathways: {} },
+        otherTerms: otherTerms || {},
+    };
     return state.cache[taxid];
 }
 
@@ -131,9 +150,11 @@ function detectSpeciesFromInput(input) {
 
     // Check each gene against patterns
     const counts = {};
+    const availableTaxids = new Set(state.speciesList.map(s => s.taxid));
+
     for (const gene of geneSample) {
         for (const p of patterns) {
-            if (p.regex.test(gene)) {
+            if (p.regex.test(gene) && availableTaxids.has(p.taxid)) {
                 counts[p.taxid] = (counts[p.taxid] || 0) + 1;
             }
         }
@@ -182,7 +203,9 @@ function esc(str) {
 }
 
 function truncate(str, max) {
-    return str;
+    if (!str) return '';
+    if (str.length <= max) return str;
+    return str.slice(0, Math.max(0, max - 1)) + '…';
 }
 
 function notFoundSummary(resolvedGenes) {
@@ -249,6 +272,11 @@ async function runAnalysis() {
         const keggResult = window.Enrichment.runKEGGEnrichment(foundIds, data.keggPathways, data.aliases, data.info);
         state.keggEnrichmentResults = keggResult;
         buildEnrichmentTab('kegg', keggResult, sourceTaxid);
+
+        // Phylogeny
+        if (state.phylogenyData) {
+            window.Phylogeny.buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, state.phylogenyData);
+        }
 
         hideLoading();
         els.resultsPlaceholder.hidden = true;
@@ -635,7 +663,6 @@ function buildEnrichmentTab(type, result, sourceTaxid) {
     }
 
     const currentPlotType = state.enrichmentPlotType;
-    const top = result.results.slice(0, 50);
 
     let html = `
         <div id="${type}-enrichment-stats" class="enrichment-stats">${statsHtml}</div>
@@ -695,20 +722,9 @@ function buildEnrichmentTab(type, result, sourceTaxid) {
                     </tr>
                 </thead>
                 <tbody>
-                    ${top.map(r => `
-                        <tr>
-                            <td><div class="term-cell" title="${esc(r.term)}">${esc(r.term)}</div></td>
-                            <td>${esc(r.description || '')}</td>
-                            <td>${esc(r.category || '')}</td>
-                            <td>${r.pValue < 0.001 ? r.pValue.toExponential(2) : r.pValue.toFixed(4)}</td>
-                            <td class="${r.fdr < 0.05 ? 'text-success font-weight-bold' : ''}">${r.fdr < 0.001 ? r.fdr.toExponential(2) : r.fdr.toFixed(4)}</td>
-                            <td>${r.fold.toFixed(2)}</td>
-                            <td class="alias-text" title="${esc(r.genes.map(g => getPreferredName(g, sourceTaxid)).join(', '))}">
-                                ${r.geneCount}
-                            </td>
-                            <td>${r.bgCount}</td>
-                        </tr>
-                    `).join('')}
+                    <tr>
+                        <td colspan="8" class="text-muted">Loading...</td>
+                    </tr>
                 </tbody>
             </table>
         </div>`;
@@ -716,6 +732,31 @@ function buildEnrichmentTab(type, result, sourceTaxid) {
     container.innerHTML = html;
     container.querySelectorAll('table').forEach(makeTableSortable);
     updateEnrichmentPlotAndTable(type); // Initial render of the plot
+}
+
+function renderEnrichmentRows(type, sourceTaxid, topN) {
+    const result = type === 'go' ? state.goEnrichmentResults : state.keggEnrichmentResults;
+    const table = document.querySelector(`#tab-${type}-enrichment table.result-table`);
+    if (!result || !table) return;
+
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+
+    const rows = result.results.slice(0, topN).map(r => `
+        <tr>
+            <td><div class="term-cell" title="${esc(r.term)}">${esc(r.term)}</div></td>
+            <td>${esc(r.description || '')}</td>
+            <td>${esc(r.category || '')}</td>
+            <td>${r.pValue < 0.001 ? r.pValue.toExponential(2) : r.pValue.toFixed(4)}</td>
+            <td class="${r.fdr < 0.05 ? 'text-success font-weight-bold' : ''}">${r.fdr < 0.001 ? r.fdr.toExponential(2) : r.fdr.toFixed(4)}</td>
+            <td>${r.fold.toFixed(2)}</td>
+            <td class="alias-text" title="${esc((r.genes || []).map(g => getPreferredName(g, sourceTaxid)).join(', '))}">
+                ${r.geneCount}
+            </td>
+            <td>${r.bgCount}</td>
+        </tr>`).join('');
+
+    tbody.innerHTML = rows || '<tr><td colspan="8" class="text-muted">No enrichment rows available.</td></tr>';
 }
 
 function switchEnrichmentPlot(type, plotType) {
@@ -731,7 +772,7 @@ function switchEnrichmentPlot(type, plotType) {
     updateEnrichmentPlotAndTable(type);
 }
 
-function updateEnrichmentPlotAndTable(type) {
+function updateEnrichmentPlotAndTable(type, forcedPlotType) {
     const result = type === 'go' ? state.goEnrichmentResults : state.keggEnrichmentResults;
     if (!result) return;
 
@@ -740,15 +781,23 @@ function updateEnrichmentPlotAndTable(type) {
     container.innerHTML = '';
 
     const topNSelect = document.getElementById(`enrich-top-n-${type}`);
-    const topN = topNSelect ? parseInt(topNSelect.value) : 20;
+    const parsedTopN = topNSelect ? parseInt(topNSelect.value, 10) : 20;
+    const topN = Number.isFinite(parsedTopN) && parsedTopN > 0 ? parsedTopN : 20;
 
     const paletteSelect = document.getElementById(`enrich-palette-${type}`);
     const palette = paletteSelect ? paletteSelect.value : 'Default';
 
+    const plotType = forcedPlotType || state.enrichmentPlotType;
+    state.enrichmentPlotType = plotType;
+
+    document.querySelectorAll(`#tab-${type}-enrichment .plot-toggle`).forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.plot === plotType);
+    });
+
     let svg;
     const title = type === 'go' ? 'GO Enrichment' : 'KEGG Pathway Enrichment';
 
-    if (state.enrichmentPlotType === 'bar') {
+    if (plotType === 'bar') {
         svg = window.Plots.createBarChart(result.results, topN, palette, title);
     } else {
         svg = window.Plots.createDotPlot(result.results, topN, palette, title);
@@ -759,6 +808,8 @@ function updateEnrichmentPlotAndTable(type) {
     } else {
         container.innerHTML = '<div class="text-muted p-3">No significant terms found (or empty results).</div>';
     }
+
+    renderEnrichmentRows(type, state.sourceSpecies, topN);
 }
 
 function exportEnrichment(type, format) {
@@ -813,6 +864,19 @@ function renderDBVersions() {
       <a class="db-card-url" href="${esc(db.url)}" target="_blank">${esc(db.url)}</a>
     </div>`;
     }
+    // Phylogeny database card
+    if (state.phylogenyData && state.phylogenyData.metadata) {
+        const pm = state.phylogenyData.metadata;
+        html += `<div class="db-card">
+      <div class="db-card-header">
+        <span class="db-card-name">${esc(pm.source || 'Phylogeny')}</span>
+        <span class="db-card-version">${esc(pm.string_version || pm.version || '')}</span>
+      </div>
+      <div class="db-card-desc">${esc(pm.description || '')}</div>
+      <div class="db-card-date">Species: ${pm.species_count || ''} · Orthogroups: ${pm.orthogroup_count || ''} · Trees: ${pm.tree_count || ''}</div>
+      <a class="db-card-url" href="https://string-db.org" target="_blank">${esc(pm.url || 'https://string-db.org')}</a>
+    </div>`;
+    }
     els.dbVersionList.innerHTML = html;
 }
 
@@ -828,17 +892,22 @@ function initTheme() {
         localStorage.setItem('gr-theme', next);
         // Re-render plots if they exist
         if (state.goEnrichmentResults && state.goEnrichmentResults.results.length > 0) {
-            const activeGoPlot = document.querySelector('[data-target="go"].plot-toggle.active');
+            const activeGoPlot = document.querySelector('#tab-go-enrichment .plot-toggle.active');
             updateEnrichmentPlotAndTable('go', activeGoPlot?.dataset.plot || 'bar');
         }
         if (state.keggEnrichmentResults && state.keggEnrichmentResults.results.length > 0) {
-            const activeKeggPlot = document.querySelector('[data-target="kegg"].plot-toggle.active');
+            const activeKeggPlot = document.querySelector('#tab-kegg-enrichment .plot-toggle.active');
             updateEnrichmentPlotAndTable('kegg', activeKeggPlot?.dataset.plot || 'bar');
         }
         // Re-render network if exists
         const btn = $('#net-svg-btn');
         if (btn && !els.resultsContent.hidden) {
             buildPPINetwork(state.genes.map(g => ({ query: g, proteinId: resolveGene(g, state.sourceSpecies) })), state.sourceSpecies);
+        }
+        // Re-render phylogeny trees if exists
+        if (state.phylogenyData && !els.resultsContent.hidden) {
+            const resolvedGenes = state.genes.map(g => ({ query: g, proteinId: resolveGene(g, state.sourceSpecies) }));
+            window.Phylogeny.buildPhylogenyTab(resolvedGenes, state.sourceSpecies, state.targetSpecies, state.phylogenyData);
         }
     });
 }
@@ -847,9 +916,12 @@ function initTheme() {
 async function init() {
     initTheme();
 
-    const [speciesList, metadata] = await Promise.all([
+    const [speciesList, metadata, phyloOrthogroups, phyloTrees, phyloMeta] = await Promise.all([
         fetchJSON('data/species.json'),
         fetchJSON('data/metadata.json'),
+        fetchJSON('data/phylogeny/orthogroups.json'),
+        fetchJSON('data/phylogeny/trees.json'),
+        fetchJSON('data/phylogeny/metadata.json'),
     ]);
 
     if (!speciesList) {
@@ -859,6 +931,10 @@ async function init() {
 
     state.speciesList = speciesList;
     state.metadata = metadata;
+
+    if (phyloOrthogroups && phyloTrees) {
+        state.phylogenyData = { orthogroups: phyloOrthogroups, trees: phyloTrees, metadata: phyloMeta };
+    }
 
     els.sourceSelect.innerHTML = '<option value="">— Select a species —</option>';
     for (const sp of speciesList) {
