@@ -75,6 +75,12 @@
           <h3>Enrichment Analysis</h3>
           <p>GO and KEGG enrichment is performed using a Fisher's Exact Test (Hypergeometric test) with
             Benjamini-Hochberg FDR correction. Background sets are species-specific genome-wide annotations.</p>
+          <h3>Hierarchical Clustering (Tree View)</h3>
+          <p>Enriched terms can be clustered into a dendrogram based on gene set overlap. The pairwise
+            <strong>Jaccard distance</strong> (1 &minus; |A &cap; B| / |A &cup; B|) measures how similar two terms'
+            gene sets are. <strong>UPGMA</strong> agglomerative clustering groups terms with the most shared genes
+            together. The resulting tree helps identify functional modules &mdash; clusters of related biological
+            processes enriched in your gene set.</p>
           <h3>Phylogeny Analysis</h3>
           <p>Gene trees are derived from <strong>eggNOG v5.0</strong> pre-computed phylogenies at the Fungi level
             (taxonomy ID 4751). Orthologous group assignments are obtained from <strong>STRING v12.0</strong>
