@@ -622,23 +622,47 @@ function _buildTaxidMapping(members, newickStr) {
     if (!tipMatches) return;
     var tips = tipMatches.map(function(t) { return t.replace(/^[\(,]/, '').replace(/:$/, ''); });
 
-    // Build locus tag → eggNOG taxid from tips
+    // Build locus tag → eggNOG taxid and protein ID → eggNOG taxid from tips
     var tipTagToEggNOG = {};
+    var tipIdToEggNOG = {};
     for (var i = 0; i < tips.length; i++) {
         var tip = tips[i];
         var dotIdx = tip.indexOf('.');
         if (dotIdx < 0) continue;
         var eggTaxid = tip.substring(0, dotIdx);
-        var tipTag = tip.substring(dotIdx + 1).replace(/[PT]\d+$/, ''); // strip P0/T0 suffix
+        var tipPart = tip.substring(dotIdx + 1);
+        var tipTag = tipPart.replace(/[PT]\d+$/, ''); // strip P0/T0 suffix
         tipTagToEggNOG[tipTag] = eggTaxid;
+        tipIdToEggNOG[tipPart] = eggTaxid;
     }
 
     // Match member names (locus tags) to tip locus tags
     for (var mi = 0; mi < members.length; mi++) {
         var m = members[mi];
-        if (!m.name || !m.species) continue;
-        var cleanName = m.name.replace(/\.\d+$/, '');
-        var eggTaxid = tipTagToEggNOG[cleanName];
+        if (!m.species) continue;
+
+        var eggTaxid = null;
+
+        if (m.name) {
+            var cleanName = m.name.replace(/\.\d+$/, '');
+            // Direct locus tag match
+            eggTaxid = tipTagToEggNOG[cleanName];
+            // FG-number pattern: FGxxxxx → FGSG_xxxxx (F. graminearum)
+            if (!eggTaxid) {
+                var fgMatch = cleanName.match(/^FG(\d{4,})/);
+                if (fgMatch) {
+                    eggTaxid = tipTagToEggNOG['FGSG_' + fgMatch[1]];
+                }
+            }
+        }
+
+        // Protein ID match: member gene "229533.I1RQ87" → try tip "I1RQ87" directly
+        if (!eggTaxid && m.gene) {
+            var protId = m.gene.indexOf('.') >= 0 ? m.gene.split('.').pop() : m.gene;
+            eggTaxid = tipIdToEggNOG[protId];
+            if (!eggTaxid) eggTaxid = tipTagToEggNOG[protId];
+        }
+
         if (eggTaxid && eggTaxid !== m.species) {
             _eggNOGToStringTaxid[eggTaxid] = m.species;
         }
