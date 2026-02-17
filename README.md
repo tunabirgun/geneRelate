@@ -2,10 +2,9 @@
 
 **A static, client-side bioinformatics tool for cross-species gene analysis in *Fusarium*.**
 
-geneRelate enables researchers to map orthologs, explore protein-protein interactions, and perform functional enrichment analysis across 20 *Fusarium* species — entirely in the browser with no backend server required.
+geneRelate enables researchers to map orthologs, explore protein-protein interactions, perform functional enrichment analysis, and visualize phylogenetic gene trees across 20 *Fusarium* species — entirely in the browser with no backend server required.
 
 **A live demo can be accessed through the link in the repository description.**
-
 
 
 ## Features
@@ -19,8 +18,8 @@ geneRelate enables researchers to map orthologs, explore protein-protein interac
 - **KEGG Enrichment Analysis** — Pathway enrichment with the same statistical framework
 - **Publication-Quality Plots** — Bar charts, dot plots, and hierarchical clustering dendrograms with 7 color palettes (Default, Viridis, Magma, Plasma, Blues, Reds, Greys)
 - **Hierarchical Clustering Tree** — UPGMA dendrogram clustering enriched terms by gene set overlap (Jaccard distance), similar to ShinyGO's Tree view
-- **Interactive Gene Tooltips** — Hover over any gene or protein ID to see functional annotation, GO terms, KEGG pathways, and direct links to UniProt, STRING, AmiGO, and KEGG
-- **Phylogeny Analysis** — Per-gene phylogenetic trees from eggNOG v5.0 pre-computed gene trees, mapped via STRING orthologous groups at the Fungi level
+- **Interactive Gene Tooltips** — Hover over any gene or protein ID in tables, network nodes, or phylogeny tree leaves to see functional annotation, GO terms, KEGG pathways, and direct links to UniProt, STRING, AmiGO, KEGG, and eggNOG
+- **Phylogeny Analysis** — Per-gene phylogenetic trees from eggNOG v5.0 pre-computed gene trees, mapped via STRING orthologous groups at the Fungi level. Query genes are highlighted in red and target species in blue, with interactive tooltips on each leaf node
 - **Phylogenetic Export Formats** — Newick, NEXUS (PAUP\*, MrBayes, FigTree), and PhyloXML (Archaeopteryx, ETE, forester) for compatibility with external phylogenetic analysis tools
 - **Multiple Export Formats** — CSV, PNG (high-resolution), SVG, and PDF
 - **Dark / Light Theme** — Persistent theme preference
@@ -83,7 +82,7 @@ Gene trees are derived from eggNOG v5.0 pre-computed phylogenies at the Fungi le
 3. STRING protein IDs are mapped to locus tags, then to eggNOG internal protein IDs
 4. Matching eggNOG group IDs are used to retrieve pre-computed gene trees (inferred via species tree reconciliation and maximum-likelihood methods)
 
-The resulting dataset covers 14,952 orthogroups (257,283 genes) across 18 *Fusarium* species, with 9,524 gene trees available. Trees are rendered as rectangular cladograms with query genes highlighted in red and target species genes highlighted in blue. Export is available in PNG, SVG, PDF, Newick, NEXUS, and PhyloXML formats.
+The resulting dataset covers 14,952 orthogroups (257,283 genes) across 18 *Fusarium* species, with 9,524 gene trees available. Trees are rendered as rectangular cladograms with query genes highlighted in red and target species genes highlighted in blue. Query gene identification uses a multi-strategy matching algorithm (direct ID, protein ID, locus tag, alias-based, and pattern matching) to bridge the STRING-to-eggNOG ID format gap. Hovering over any leaf node shows species name, gene IDs, orthogroup, branch length, and links to eggNOG, STRING, and UniProt. Export is available in PNG, SVG, PDF, Newick, NEXUS, and PhyloXML formats.
 
 ### Synthetic Species Data
 
