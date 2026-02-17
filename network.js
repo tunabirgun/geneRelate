@@ -98,7 +98,7 @@ function buildPPINetworkSVG(resolvedGenes, ppiData, infoData, scoreThreshold, ge
             .reduce((sum, e) => sum + e.score, 0);
     });
 
-    const svg = renderNetworkViewer(nodes, edges, width, height);
+    const svg = renderNetworkViewer(nodes, edges, width, height, taxid);
     return { svg, nodes };
 }
 
@@ -189,7 +189,7 @@ function runSimulationSync(nodes, edges, width, height) {
 /**
  * Render the viewer with Zoom/Pan capabilities.
  */
-function renderNetworkViewer(nodes, edges, width, height) {
+function renderNetworkViewer(nodes, edges, width, height, taxid) {
     const theme = document.documentElement.getAttribute('data-theme');
     const isDark = theme === 'dark';
 
