@@ -825,6 +825,7 @@ function buildEnrichmentTab(type, result, sourceTaxid) {
                 <div class="btn-group">
                     <button class="btn btn-sm plot-toggle ${currentPlotType === 'bar' ? 'active' : ''}" data-plot="bar" onclick="switchEnrichmentPlot('${type}', 'bar')">Bar</button>
                     <button class="btn btn-sm plot-toggle ${currentPlotType === 'dot' ? 'active' : ''}" data-plot="dot" onclick="switchEnrichmentPlot('${type}', 'dot')">Dot</button>
+                    <button class="btn btn-sm plot-toggle ${currentPlotType === 'tree' ? 'active' : ''}" data-plot="tree" onclick="switchEnrichmentPlot('${type}', 'tree')">Tree</button>
                 </div>
             </div>
             <div class="control-group">
@@ -952,6 +953,8 @@ function updateEnrichmentPlotAndTable(type, forcedPlotType) {
 
     if (plotType === 'bar') {
         svg = window.Plots.createBarChart(result.results, topN, palette, title);
+    } else if (plotType === 'tree') {
+        svg = window.Plots.createClusterTree(result.results, topN, palette, title + ' — Hierarchical Clustering');
     } else {
         svg = window.Plots.createDotPlot(result.results, topN, palette, title);
     }

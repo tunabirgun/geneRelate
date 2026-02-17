@@ -438,4 +438,288 @@ function truncLabel(str, max) {
     return str.substring(0, max - 1) + '…';
 }
 
-window.Plots = { createBarChart, createDotPlot, PALETTES };
+// ===== Hierarchical Clustering =====
+
+/**
+ * Compute pairwise Jaccard distance matrix between enrichment terms based on gene overlap.
+ * Jaccard distance = 1 - |A ∩ B| / |A ∪ B|
+ */
+function computeJaccardDistanceMatrix(data) {
+    const n = data.length;
+    const geneSets = data.map(d => new Set(d.genes || []));
+    const dist = Array.from({ length: n }, () => new Float64Array(n));
+
+    for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+            const a = geneSets[i];
+            const b = geneSets[j];
+            let intersection = 0;
+            for (const g of a) {
+                if (b.has(g)) intersection++;
+            }
+            const union = a.size + b.size - intersection;
+            const d = union === 0 ? 1 : 1 - intersection / union;
+            dist[i][j] = d;
+            dist[j][i] = d;
+        }
+    }
+    return dist;
+}
+
+/**
+ * UPGMA (Unweighted Pair Group Method with Arithmetic Mean) agglomerative clustering.
+ * Returns a tree: internal nodes have { left, right, height }, leaves have { index, height: 0 }.
+ */
+function upgmaClustering(distMatrix) {
+    const n = distMatrix.length;
+    if (n === 0) return null;
+    if (n === 1) return { index: 0, height: 0 };
+
+    // Working copy of distances + cluster sizes
+    const dist = distMatrix.map(row => Array.from(row));
+    const sizes = new Array(n).fill(1);
+    const active = new Set(Array.from({ length: n }, (_, i) => i));
+    const nodes = Array.from({ length: n }, (_, i) => ({ index: i, height: 0 }));
+
+    for (let step = 0; step < n - 1; step++) {
+        // Find closest pair
+        let minDist = Infinity, mi = -1, mj = -1;
+        const activeArr = [...active];
+        for (let ai = 0; ai < activeArr.length; ai++) {
+            for (let aj = ai + 1; aj < activeArr.length; aj++) {
+                const i = activeArr[ai], j = activeArr[aj];
+                if (dist[i][j] < minDist) {
+                    minDist = dist[i][j];
+                    mi = i; mj = j;
+                }
+            }
+        }
+
+        // Create merged node
+        const mergedNode = {
+            left: nodes[mi],
+            right: nodes[mj],
+            height: minDist / 2
+        };
+
+        // Update distances (UPGMA: weighted average by cluster size)
+        const newIdx = mi;
+        const si = sizes[mi], sj = sizes[mj];
+        for (const k of active) {
+            if (k === mi || k === mj) continue;
+            dist[newIdx][k] = (dist[mi][k] * si + dist[mj][k] * sj) / (si + sj);
+            dist[k][newIdx] = dist[newIdx][k];
+        }
+
+        sizes[newIdx] = si + sj;
+        nodes[newIdx] = mergedNode;
+        active.delete(mj);
+    }
+
+    return nodes[[...active][0]];
+}
+
+/**
+ * Assign y-positions to leaves (in-order traversal) and compute x from height.
+ * Returns { leaves: [{index, x, y}], internals: [{x, yTop, yBottom}] }
+ */
+function layoutDendrogram(root, maxHeight, plotW, rowH) {
+    const leaves = [];
+    const branches = [];
+    let leafIndex = 0;
+
+    // x-scale: height → horizontal position (0 = leaves on right, maxHeight = root on left)
+    const xScale = (h) => plotW * (1 - h / Math.max(maxHeight, 1e-10));
+
+    function traverse(node) {
+        if (node.index !== undefined && !node.left) {
+            // Leaf
+            const y = leafIndex * rowH + rowH / 2;
+            leafIndex++;
+            leaves.push({ index: node.index, x: xScale(0), y });
+            return y;
+        }
+
+        const yLeft = traverse(node.left);
+        const yRight = traverse(node.right);
+        const x = xScale(node.height);
+
+        // Horizontal lines from children to this node's x, then vertical connector
+        branches.push({
+            x,
+            xLeft: xScale(node.left.height !== undefined ? node.left.height : 0),
+            xRight: xScale(node.right.height !== undefined ? node.right.height : 0),
+            yTop: Math.min(yLeft, yRight),
+            yBottom: Math.max(yLeft, yRight),
+            yLeft,
+            yRight,
+            height: node.height
+        });
+
+        return (yLeft + yRight) / 2;
+    }
+
+    traverse(root);
+    return { leaves, branches };
+}
+
+/**
+ * Create a hierarchical clustering dendrogram of enriched terms.
+ * Terms are clustered by Jaccard similarity of their gene sets.
+ */
+function createClusterTree(results, topN = 20, palette = 'Default', title = 'Enrichment Clustering') {
+    const data = results.filter(r => r.fdr <= 1).slice(0, topN);
+    if (data.length < 2) return null;
+
+    const theme = document.documentElement.getAttribute('data-theme');
+    const textColor = theme === 'dark' ? '#d4d4d4' : '#1a1a1a';
+    const textMuted = theme === 'dark' ? '#888888' : '#666666';
+    const axisColor = theme === 'dark' ? '#555555' : '#333333';
+    const gridColor = theme === 'dark' ? '#333333' : '#e0e0e0';
+    const bgColor = theme === 'dark' ? '#1a1a1a' : '#ffffff';
+
+    // Clustering
+    const distMatrix = computeJaccardDistanceMatrix(data);
+    const tree = upgmaClustering(distMatrix);
+    if (!tree) return null;
+
+    // Find max tree height for scaling
+    function getMaxHeight(node) {
+        if (!node.left) return 0;
+        return Math.max(node.height || 0, getMaxHeight(node.left), getMaxHeight(node.right));
+    }
+    const maxTreeHeight = getMaxHeight(tree);
+
+    // Layout
+    const margin = { top: 50, right: 20, bottom: 40, left: 280, treeRight: 300 };
+    const rowH = 22;
+    const plotW = 300; // dendrogram width
+    const plotH = data.length * rowH;
+    const width = margin.left + plotW + margin.treeRight + margin.right;
+    const height = margin.top + plotH + margin.bottom;
+
+    const layout = layoutDendrogram(tree, maxTreeHeight, plotW, rowH);
+
+    // Color scale: −log₁₀(FDR) → intensity
+    const maxLogFDR = Math.max(...data.map(d => -Math.log10(Math.max(d.fdr, 1e-300))));
+    const colorFn = PALETTES[palette] || PALETTES['Default'];
+    const fdrColor = (fdr) => {
+        const logFDR = -Math.log10(Math.max(fdr, 1e-300));
+        const t = maxLogFDR > 0 ? Math.min(logFDR / maxLogFDR, 1) : 0.5;
+        return colorFn(t, theme);
+    };
+
+    const svg = makeSVG(width, height);
+    addRect(svg, 0, 0, width, height, bgColor, 'plot-bg');
+
+    // Title
+    addText(svg, width / 2, 22, title, {
+        size: '14px', weight: '700', fill: textColor, anchor: 'middle',
+        family: "'EB Garamond', Georgia, serif"
+    });
+    const sigCount = data.filter(d => d.fdr < 0.05).length;
+    addText(svg, width / 2, 38, `Top ${data.length} terms · ${sigCount} significant (FDR < 0.05) · Clustered by gene overlap (Jaccard)`, {
+        size: '10px', fill: textMuted, anchor: 'middle',
+        family: "'EB Garamond', Georgia, serif"
+    });
+
+    const g = addGroup(svg, margin.left, margin.top);
+
+    // Draw branches
+    for (const b of layout.branches) {
+        // Vertical connector
+        addLine(g, b.x, b.yTop, b.x, b.yBottom, axisColor, 1);
+        // Horizontal line to left child
+        addLine(g, b.x, b.yLeft, b.xLeft, b.yLeft, axisColor, 1);
+        // Horizontal line to right child
+        addLine(g, b.x, b.yRight, b.xRight, b.yRight, axisColor, 1);
+    }
+
+    // Draw leaves: colored dot + term label
+    for (const leaf of layout.leaves) {
+        const d = data[leaf.index];
+        const color = fdrColor(d.fdr);
+
+        // Colored dot at leaf
+        const c = addCircle(g, leaf.x + 4, leaf.y, 5, color);
+        c.setAttribute('stroke', axisColor);
+        c.setAttribute('stroke-width', '0.5');
+
+        // Gene count badge
+        addText(g, leaf.x + 14, leaf.y + 1, `${d.geneCount}`, {
+            size: '8px', fill: textMuted, anchor: 'start', baseline: 'middle',
+            family: "'EB Garamond', Georgia, serif"
+        });
+
+        // Term description
+        const label = truncLabel(d.description, 50);
+        addText(g, leaf.x + 30, leaf.y + 1, label, {
+            size: '10px', fill: textColor, anchor: 'start', baseline: 'middle',
+            family: "'EB Garamond', Georgia, serif"
+        });
+
+        // Significance marker
+        if (d.fdr < 0.001) {
+            addText(g, leaf.x + 30 + label.length * 5.5 + 4, leaf.y + 1, '***', {
+                size: '8px', fill: textMuted, anchor: 'start', baseline: 'middle'
+            });
+        } else if (d.fdr < 0.01) {
+            addText(g, leaf.x + 30 + label.length * 5.5 + 4, leaf.y + 1, '**', {
+                size: '8px', fill: textMuted, anchor: 'start', baseline: 'middle'
+            });
+        } else if (d.fdr < 0.05) {
+            addText(g, leaf.x + 30 + label.length * 5.5 + 4, leaf.y + 1, '*', {
+                size: '8px', fill: textMuted, anchor: 'start', baseline: 'middle'
+            });
+        }
+    }
+
+    // Distance axis at bottom
+    const distTicks = niceTicksFor(0, maxTreeHeight, 4);
+    for (const t of distTicks) {
+        const x = plotW * (1 - t / Math.max(maxTreeHeight, 1e-10));
+        addLine(g, x, plotH + 3, x, plotH + 8, axisColor, 1);
+        addText(g, x, plotH + 20, t.toFixed(2), {
+            size: '9px', fill: textColor, anchor: 'middle',
+            family: "'EB Garamond', Georgia, serif"
+        });
+    }
+    addLine(g, 0, plotH + 3, plotW, plotH + 3, axisColor, 1);
+    addText(svg, margin.left + plotW / 2, height - 6, 'Jaccard Distance', {
+        size: '10px', fill: textColor, anchor: 'middle', weight: '500',
+        family: "'EB Garamond', Georgia, serif"
+    });
+
+    // FDR color legend (top-right area)
+    const legX = plotW + 240;
+    const legY = 0;
+    const gradH = Math.min(plotH * 0.4, 80);
+    const gradW = 12;
+
+    addText(g, legX, legY - 6, '−log\u2081\u2080(FDR)', {
+        size: '9px', fill: textColor, anchor: 'start', weight: '600',
+        family: "'EB Garamond', Georgia, serif"
+    });
+
+    const gradSteps = 15;
+    for (let i = 0; i < gradSteps; i++) {
+        const frac = i / (gradSteps - 1);
+        const cy = legY + frac * gradH;
+        const color = colorFn(1 - frac, theme);
+        addRect(g, legX, cy, gradW, gradH / gradSteps + 1, color);
+    }
+    addRect(g, legX, legY, gradW, gradH, 'none').setAttribute('stroke', axisColor);
+
+    addText(g, legX + gradW + 4, legY + 4, maxLogFDR.toFixed(1), {
+        size: '8px', fill: textMuted, anchor: 'start', baseline: 'middle',
+        family: "'EB Garamond', Georgia, serif"
+    });
+    addText(g, legX + gradW + 4, legY + gradH, '0.0', {
+        size: '8px', fill: textMuted, anchor: 'start', baseline: 'middle',
+        family: "'EB Garamond', Georgia, serif"
+    });
+
+    return svg;
+}
+
+window.Plots = { createBarChart, createDotPlot, createClusterTree, PALETTES };
