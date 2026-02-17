@@ -17,7 +17,9 @@ geneRelate enables researchers to map orthologs, explore protein-protein interac
 - **KEGG Pathway Annotations** — Per-gene KEGG pathway mappings
 - **GO Enrichment Analysis** — Over-representation analysis using Fisher's Exact Test (hypergeometric) with Benjamini-Hochberg FDR correction
 - **KEGG Enrichment Analysis** — Pathway enrichment with the same statistical framework
-- **Publication-Quality Plots** — Bar charts and dot plots with 7 color palettes (Default, Viridis, Magma, Plasma, Blues, Reds, Greys)
+- **Publication-Quality Plots** — Bar charts, dot plots, and hierarchical clustering dendrograms with 7 color palettes (Default, Viridis, Magma, Plasma, Blues, Reds, Greys)
+- **Hierarchical Clustering Tree** — UPGMA dendrogram clustering enriched terms by gene set overlap (Jaccard distance), similar to ShinyGO's Tree view
+- **Interactive Gene Tooltips** — Hover over any gene or protein ID to see functional annotation, GO terms, KEGG pathways, and direct links to UniProt, STRING, AmiGO, and KEGG
 - **Phylogeny Analysis** — Per-gene phylogenetic trees from eggNOG v5.0 pre-computed gene trees, mapped via STRING orthologous groups at the Fungi level
 - **Phylogenetic Export Formats** — Newick, NEXUS (PAUP\*, MrBayes, FigTree), and PhyloXML (Archaeopteryx, ETE, forester) for compatibility with external phylogenetic analysis tools
 - **Multiple Export Formats** — CSV, PNG (high-resolution), SVG, and PDF
@@ -63,6 +65,14 @@ Interaction data is sourced from STRING v12.0. The network visualization uses a 
 ### Enrichment Analysis
 
 GO and KEGG enrichment is performed using a Fisher's Exact Test (hypergeometric test) with Benjamini-Hochberg FDR correction. Background sets are species-specific genome-wide annotations.
+
+### Hierarchical Clustering of Enriched Terms
+
+Enriched terms can be visualized as a hierarchical clustering dendrogram (Tree view). The clustering method:
+
+1. **Distance metric** — Pairwise Jaccard distance between terms based on their annotated gene sets: *d(A, B) = 1 − |A ∩ B| / |A ∪ B|*. Terms sharing more genes are closer in the tree.
+2. **Clustering algorithm** — UPGMA (Unweighted Pair Group Method with Arithmetic Mean), which produces ultrametric trees where the distance from the root to any leaf is equal. This is appropriate for functional term clustering where the goal is to identify groups of related biological processes, not to infer evolutionary relationships.
+3. **Visualization** — Horizontal dendrogram with branch length proportional to Jaccard distance. Leaf nodes are colored by significance (−log₁₀ FDR) using the selected color palette.
 
 ### Phylogeny Analysis
 
