@@ -530,6 +530,79 @@ function renderTreeSVG(root, opts) {
     return svg;
 }
 
+// ===== Query Gene Matching =====
+
+/**
+ * Find tree tip names that correspond to the query gene.
+ * Uses multiple strategies to bridge the STRING→eggNOG ID gap:
+ *   1. Direct match of matchedId in tips
+ *   2. Protein ID portion match
+ *   3. Member name (cleaned) matches tip locus tag (cleaned)
+ *   4. Alias-based: locus tags from aliases.json match tip locus tags
+ *   5. FG-number pattern: FGxxxxx → FGSG_xxxxx
+ * @returns {Set} set of tree tip names that are the query gene
+ */
+function _findQueryTipNames(matchedId, members, newickStr, sourceTaxid) {
+    // Extract tip names from Newick
+    var tipMatches = newickStr.match(/[\(,]([A-Za-z0-9_.]+):/g);
+    if (!tipMatches) return new Set([matchedId]);
+    var tipNames = tipMatches.map(function(t) { return t.replace(/^[\(,]/, '').replace(/:$/, ''); });
+
+    // S1: direct match
+    if (tipNames.indexOf(matchedId) >= 0) return new Set([matchedId]);
+
+    // Get member info and protein ID
+    var member = null;
+    for (var i = 0; i < members.length; i++) {
+        if (members[i].gene === matchedId) { member = members[i]; break; }
+    }
+    var proteinId = matchedId.indexOf('.') >= 0 ? matchedId.split('.').pop() : matchedId;
+
+    // S2: protein ID matches tip's ID portion
+    for (var ti = 0; ti < tipNames.length; ti++) {
+        var tipId = tipNames[ti].indexOf('.') >= 0 ? tipNames[ti].split('.').pop() : tipNames[ti];
+        if (tipId === proteinId) return new Set([tipNames[ti]]);
+    }
+
+    // S3: member name (cleaned) matches tip locus tag (cleaned)
+    if (member && member.name) {
+        var cleanName = member.name.replace(/\.\d+$/, '');
+        for (var ti = 0; ti < tipNames.length; ti++) {
+            var tipPart = tipNames[ti].indexOf('.') >= 0 ? tipNames[ti].split('.').pop() : tipNames[ti];
+            var tipClean = tipPart.replace(/[PT]\d+$/, '');
+            if (tipClean === cleanName) return new Set([tipNames[ti]]);
+        }
+    }
+
+    // S4: alias-based matching — use loaded species alias data
+    var cache = (window.state || {}).cache;
+    var aliasData = cache && cache[sourceTaxid] ? cache[sourceTaxid].aliases : null;
+    if (aliasData) {
+        var als = aliasData[proteinId] || [];
+        for (var ai = 0; ai < als.length; ai++) {
+            var alias = als[ai];
+            for (var ti = 0; ti < tipNames.length; ti++) {
+                var tipPart = tipNames[ti].indexOf('.') >= 0 ? tipNames[ti].split('.').pop() : tipNames[ti];
+                var tipClean = tipPart.replace(/[PT]\d+$/, '');
+                if (tipClean === alias) return new Set([tipNames[ti]]);
+            }
+        }
+    }
+
+    // S5: FG-number pattern (FGxxxxx → FGSG_xxxxx)
+    if (member && member.name) {
+        var numMatch = member.name.match(/^FG(\d{4,})/);
+        if (numMatch) {
+            var num = numMatch[1];
+            for (var ti = 0; ti < tipNames.length; ti++) {
+                if (tipNames[ti].indexOf('FGSG_' + num) >= 0) return new Set([tipNames[ti]]);
+            }
+        }
+    }
+
+    return new Set([matchedId]); // fallback
+}
+
 // ===== Tab Builder =====
 
 /**
@@ -621,11 +694,6 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
             html += '<button class="download-btn" onclick="window.Phylogeny.exportNexus(\'' + _esc(ogId) + '\')">NEXUS</button>';
             html += '<button class="download-btn" onclick="window.Phylogeny.exportPhyloXML(\'' + _esc(ogId) + '\')">PhyloXML</button>';
         }
-        html += '<div class="phylo-legend">';
-        html += '<span class="ppi-legend-item"><span class="ppi-dot query"></span> Query</span>';
-        html += '<span class="ppi-legend-item"><span class="ppi-dot hub"></span> Target</span>';
-        html += '<span class="ppi-legend-item"><span class="ppi-dot interactor"></span> Other</span>';
-        html += '</div>';
         html += '</div>';
 
         // Tree container
@@ -684,7 +752,7 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
                 newick: newick,
                 ogId: ogId,
                 matchedId: matchedId,
-                queryGenes: new Set([matchedId]),
+                queryGenes: _findQueryTipNames(matchedId, members, newick, sourceTaxid),
                 targetSpecies: targetSet,
                 getSpeciesName: getSpeciesName,
                 memberNames: memberNameMap,
