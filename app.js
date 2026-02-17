@@ -100,8 +100,6 @@ function italicSpeciesName(name) {
     return `<em>${esc(name)}</em>`;
 }
 
-
-
 // ===== Gene Resolution =====
 function resolveGene(geneName, taxid) {
     const data = state.cache[taxid];
