@@ -61,7 +61,8 @@
             <em>Fusarium</em>.
           </p>
           <p>It enables researchers to seamlessly map orthologs, visualize protein-protein interaction (PPI) networks,
-            and perform functional enrichment analysis (GO &amp; KEGG) without requiring a backend server.</p>
+            perform functional enrichment analysis (GO &amp; KEGG), and explore phylogenetic relationships through
+            pre-computed gene trees &mdash; all entirely in the browser with no backend server required.</p>
         </div>
         <div id="about-methods" class="modal-tab-content">
           <h3>Orthology Mapping</h3>
@@ -85,8 +86,9 @@
           <p>Gene trees are derived from <strong>eggNOG v5.0</strong> pre-computed phylogenies at the Fungi level
             (taxonomy ID 4751). Orthologous group assignments are obtained from <strong>STRING v12.0</strong>
             hierarchical orthology (eggNOG NOG IDs). Gene trees were inferred using species tree reconciliation
-            and maximum-likelihood methods. Trees are rendered as rectangular cladograms with query and target
-            species genes highlighted.</p>
+            and maximum-likelihood methods. Trees are rendered as rectangular cladograms with query genes
+            highlighted in red and target species genes in blue. Hover over any leaf node to see species, gene
+            IDs, orthogroup, branch length, and links to eggNOG, STRING, and UniProt.</p>
           <h3>Synthetic Species Data</h3>
           <p><em>F. culmorum</em> and <em>F. pseudograminearum</em> are not available in STRING. Their data is
             derived from <em>F. graminearum</em> via gene ID prefix mapping (FGSG_ &rarr; FCUL_ / FPSE_).
