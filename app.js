@@ -1333,6 +1333,7 @@ document.addEventListener('mouseover', (e) => {
     // Don't hide if mouse enters the tooltip itself
     if (tooltipEl.contains(e.target)) {
         clearTimeout(tooltipTimer);
+        clearTimeout(window._phyloTooltipTimer);
         return;
     }
     const target = e.target.closest('[data-pid]');
@@ -1355,11 +1356,13 @@ document.addEventListener('mouseout', (e) => {
 
 // Hide tooltip when leaving the tooltip itself
 tooltipEl.addEventListener('mouseleave', () => {
+    clearTimeout(window._phyloTooltipTimer);
     hideGeneTooltip();
 });
 
-// Expose for network.js
+// Expose for network.js and phylogeny.js
 window.showGeneTooltip = showGeneTooltip;
 window.hideGeneTooltip = hideGeneTooltip;
+window.cancelTooltipTimer = function() { clearTimeout(tooltipTimer); };
 
 document.addEventListener('DOMContentLoaded', init);

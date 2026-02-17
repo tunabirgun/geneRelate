@@ -247,12 +247,109 @@ function _addText(parent, x, y, content, opts) {
     return t;
 }
 
+// ===== Phylogeny Tooltip =====
+
+/**
+ * Show a tooltip for a phylogeny tree leaf node.
+ * Uses the existing gene-tooltip div from app.js.
+ */
+function _showPhyloTooltip(tipData, event) {
+    var tooltipEl = document.getElementById('gene-tooltip');
+    if (!tooltipEl) return;
+
+    // Clear any pending hide from the main tooltip system
+    if (window.cancelTooltipTimer) window.cancelTooltipTimer();
+    clearTimeout(window._phyloTooltipTimer);
+
+    window._phyloTooltipTimer = setTimeout(function() {
+        var role = tipData.isQuery ? 'Query gene' : tipData.isTarget ? 'Target species' : 'Other';
+        var roleColor = tipData.isQuery ? '#c92a2a' : tipData.isTarget ? '#1864ab' : '#666';
+        var theme = document.documentElement.getAttribute('data-theme');
+        if (theme === 'dark') {
+            roleColor = tipData.isQuery ? '#ff8787' : tipData.isTarget ? '#4dabf7' : '#999';
+        }
+
+        var html = '<div class="gene-tooltip-header">';
+        if (tipData.prefName) {
+            html += '<span class="gene-tooltip-name">' + _esc(tipData.prefName) + '</span>';
+        }
+        html += '<span class="gene-tooltip-pid">' + _esc(tipData.shortId) + '</span>';
+        html += '</div>';
+
+        // Species
+        html += '<div class="gene-tooltip-annotation" style="margin-bottom:4px;">';
+        html += '<em>' + _esc(tipData.species) + '</em>';
+        html += '</div>';
+
+        // Role badge
+        html += '<div style="margin-bottom:6px;">';
+        html += '<span style="display:inline-block;padding:1px 8px;border-radius:3px;font-size:0.75rem;';
+        html += 'background:' + roleColor + '22;color:' + roleColor + ';border:1px solid ' + roleColor + '44;">';
+        html += role + '</span>';
+        html += '</div>';
+
+        // Details section
+        html += '<div class="gene-tooltip-section">';
+        html += '<div class="gene-tooltip-section-title">Details</div>';
+        html += '<ul class="gene-tooltip-terms">';
+        html += '<li><strong>Full ID:</strong> ' + _esc(tipData.geneName) + '</li>';
+        if (tipData.ogId) {
+            html += '<li><strong>Orthogroup:</strong> ' + _esc(tipData.ogId) + '</li>';
+        }
+        if (tipData.branchLength !== null && tipData.branchLength !== undefined) {
+            html += '<li><strong>Branch length:</strong> ' + tipData.branchLength.toFixed(5) + '</li>';
+        }
+        html += '</ul></div>';
+
+        // Reference links — try to build links for the gene
+        html += '<div class="gene-tooltip-refs">';
+        // eggNOG link for the orthogroup
+        if (tipData.ogId) {
+            html += '<a href="http://eggnog5.embl.de/#/app/results?target_nogs=' + encodeURIComponent(tipData.ogId) + '" target="_blank" rel="noopener">eggNOG</a>';
+        }
+        // STRING link if we have species taxid
+        if (tipData.speciesTaxid && tipData.shortId) {
+            html += '<a href="https://string-db.org/network/' + encodeURIComponent(tipData.speciesTaxid + '.' + tipData.shortId) + '" target="_blank" rel="noopener">STRING</a>';
+        }
+        // UniProt search for the protein ID
+        if (tipData.shortId) {
+            html += '<a href="https://www.uniprot.org/uniprotkb?query=' + encodeURIComponent(tipData.shortId) + '" target="_blank" rel="noopener">UniProt</a>';
+        }
+        html += '</div>';
+
+        tooltipEl.innerHTML = html;
+        tooltipEl.hidden = false;
+
+        // Position near cursor
+        var pad = 12;
+        var x = event.clientX + pad;
+        var y = event.clientY + pad;
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+
+        tooltipEl.style.left = x + 'px';
+        tooltipEl.style.top = y + 'px';
+
+        // Adjust after rendering to avoid overflow
+        requestAnimationFrame(function() {
+            var rect = tooltipEl.getBoundingClientRect();
+            if (rect.right > vw - 8) {
+                tooltipEl.style.left = Math.max(8, event.clientX - rect.width - pad) + 'px';
+            }
+            if (rect.bottom > vh - 8) {
+                tooltipEl.style.top = Math.max(8, event.clientY - rect.height - pad) + 'px';
+            }
+            tooltipEl.classList.add('visible');
+        });
+    }, 200);
+}
+
 // ===== SVG Tree Renderer =====
 
 /**
  * Render a phylogenetic tree as SVG.
  * @param {Object} root - parsed Newick tree
- * @param {Object} opts - { queryGenes: Set, targetSpecies: Set, getSpeciesName: fn, title: string }
+ * @param {Object} opts - { queryGenes: Set, targetSpecies: Set, getSpeciesName: fn, title: string, members: [], ogId: string }
  * @returns {SVGElement}
  */
 function renderTreeSVG(root, opts) {
@@ -261,6 +358,8 @@ function renderTreeSVG(root, opts) {
     const targetSpecies = opts.targetSpecies || new Set();
     const getSpeciesName = opts.getSpeciesName || (() => '');
     const memberNames = opts.memberNames || {};
+    const members = opts.members || [];
+    const ogId = opts.ogId || '';
 
     const theme = document.documentElement.getAttribute('data-theme');
     const isDark = theme === 'dark';
@@ -328,7 +427,11 @@ function renderTreeSVG(root, opts) {
         }
 
         if (isLeaf) {
-            _addCircle(g, x, y, nodeR, nodeColor);
+            // Wrap leaf in interactive group for tooltip
+            const leafG = _addGroup(g, 0, 0);
+            leafG.style.cursor = 'pointer';
+
+            _addCircle(leafG, x, y, nodeR, nodeColor);
 
             // Label: preferred name + species
             const spName = getSpeciesName(speciesTaxid);
@@ -339,7 +442,7 @@ function renderTreeSVG(root, opts) {
                 ? (spName ? `${prefName} | ${shortId} (${spName})` : `${prefName} | ${shortId}`)
                 : (spName ? `${shortId} (${spName})` : shortId);
 
-            const textEl = _addText(g, x + 8, y, label, {
+            const textEl = _addText(leafG, x + 8, y, label, {
                 size: fontSize, fill: textColor, baseline: 'middle'
             });
 
@@ -349,6 +452,39 @@ function renderTreeSVG(root, opts) {
             } else if (targetSpecies.has(speciesTaxid)) {
                 textEl.setAttribute('fill', targetColor);
             }
+
+            // Invisible hit area for easier hovering
+            const hitRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            hitRect.setAttribute('x', x - nodeR);
+            hitRect.setAttribute('y', y - leafH / 2);
+            hitRect.setAttribute('width', plotW + margin.right - x + nodeR);
+            hitRect.setAttribute('height', leafH);
+            hitRect.setAttribute('fill', 'transparent');
+            leafG.insertBefore(hitRect, leafG.firstChild);
+
+            // Tooltip data
+            const tipData = {
+                geneName: geneName,
+                shortId: shortId,
+                prefName: prefName || '',
+                species: spName || speciesTaxid,
+                speciesTaxid: speciesTaxid,
+                isQuery: queryGenes.has(geneName),
+                isTarget: targetSpecies.has(speciesTaxid),
+                branchLength: node.branchLength,
+                ogId: ogId
+            };
+
+            leafG.addEventListener('mouseenter', function(e) {
+                _showPhyloTooltip(tipData, e);
+            });
+            leafG.addEventListener('mouseleave', function(e) {
+                var related = e.relatedTarget;
+                var tooltip = document.getElementById('gene-tooltip');
+                if (related && tooltip && tooltip.contains(related)) return;
+                clearTimeout(window._phyloTooltipTimer);
+                if (window.hideGeneTooltip) window.hideGeneTooltip();
+            });
         } else {
             // Internal node: small dot
             _addCircle(g, x, y, 2, branchColor);
@@ -552,6 +688,7 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
                 targetSpecies: targetSet,
                 getSpeciesName: getSpeciesName,
                 memberNames: memberNameMap,
+                members: members,
                 title: ogId + ' Gene Tree'
             });
         }
@@ -595,6 +732,8 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
             targetSpecies: te.targetSpecies,
             getSpeciesName: te.getSpeciesName,
             memberNames: te.memberNames,
+            members: te.members,
+            ogId: te.ogId,
             title: te.title
         });
 
