@@ -13,7 +13,7 @@
  * Build and render a PPI network for the given genes.
  * @returns {Object|null} { svg, nodes }
  */
-function buildPPINetworkSVG(resolvedGenes, ppiData, infoData, scoreThreshold, getNameFn) {
+function buildPPINetworkSVG(resolvedGenes, ppiData, infoData, scoreThreshold, getNameFn, taxid) {
     if (!ppiData) return null;
 
     const queryIds = new Set(resolvedGenes.filter(g => g.proteinId).map(g => g.proteinId));
@@ -318,6 +318,18 @@ function renderNetworkViewer(nodes, edges, width, height) {
             t.style.pointerEvents = 'none';
             t.style.textShadow = isDark ? '0 1px 2px #000' : '0 1px 2px #fff';
             g.appendChild(t);
+        }
+
+        // Tooltip data attributes
+        if (taxid) {
+            g.dataset.pid = n.id;
+            g.dataset.taxid = taxid;
+            g.addEventListener('mouseenter', (e) => {
+                if (window.showGeneTooltip) window.showGeneTooltip(n.id, taxid, e);
+            });
+            g.addEventListener('mouseleave', () => {
+                if (window.hideGeneTooltip) window.hideGeneTooltip();
+            });
         }
 
         container.appendChild(g);

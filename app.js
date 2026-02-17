@@ -451,7 +451,7 @@ function buildAliasResults(resolvedGenes, sourceTaxid, targetTaxids) {
 
     for (const { query, proteinId } of found) {
         html += `<div class="result-section">`;
-        html += `<div class="result-section-title"><span class="result-gene-badge">${esc(query)}</span>`;
+        html += `<div class="result-section-title"><span class="result-gene-badge" data-pid="${esc(proteinId)}" data-taxid="${esc(sourceTaxid)}">${esc(query)}</span>`;
         const name = getPreferredName(proteinId, sourceTaxid);
         if (name !== query) html += ` → ${esc(name)}`;
         html += `</div>`;
@@ -483,8 +483,8 @@ function buildAliasResults(resolvedGenes, sourceTaxid, targetTaxids) {
                         const matchAliases = (targetData.aliases?.[matchPid] || []).slice(0, 5).join(', ');
                         html += `<tr>
               <td>${italicSpeciesName(targetName)}</td>
-              <td><code>${esc(matchPid)}</code></td>
-              <td>${esc(matchName)}</td>
+              <td><code data-pid="${esc(matchPid)}" data-taxid="${esc(targetTaxid)}">${esc(matchPid)}</code></td>
+              <td data-pid="${esc(matchPid)}" data-taxid="${esc(targetTaxid)}">${esc(matchName)}</td>
               <td class="alias-text">${esc(matchAliases)}</td>
             </tr>`;
                         foundMatch = true;
@@ -521,7 +521,7 @@ function buildPPIResults(resolvedGenes, sourceTaxid) {
 
     for (const { query, proteinId } of found) {
         html += `<div class="result-section">`;
-        html += `<div class="result-section-title"><span class="result-gene-badge">${esc(query)}</span>`;
+        html += `<div class="result-section-title"><span class="result-gene-badge" data-pid="${esc(proteinId)}" data-taxid="${esc(sourceTaxid)}">${esc(query)}</span>`;
         const name = getPreferredName(proteinId, sourceTaxid);
         if (name !== query) html += ` → ${esc(name)}`;
         html += `</div>`;
@@ -550,8 +550,8 @@ function buildPPIResults(resolvedGenes, sourceTaxid) {
             const scoreClass = s >= 900 ? 'score-high' : s >= 700 ? 'score-med' : 'score-low';
             const annotation = data.info?.[p]?.annotation || '';
             html += `<tr>
-        <td><code>${esc(p)}</code></td>
-        <td>${esc(iName)}</td>
+        <td><code data-pid="${esc(p)}" data-taxid="${esc(sourceTaxid)}">${esc(p)}</code></td>
+        <td data-pid="${esc(p)}" data-taxid="${esc(sourceTaxid)}">${esc(iName)}</td>
         <td><span class="score ${scoreClass}">${s}</span></td>
         <td class="alias-text">${esc(truncate(annotation, 100))}</td>
       </tr>`;
@@ -578,7 +578,7 @@ function buildPPINetwork(resolvedGenes, sourceTaxid) {
 
     const getNameFn = (pid) => getPreferredName(pid, sourceTaxid);
 
-    const result = window.PPINetwork.buildPPINetworkSVG(resolvedGenes, data.ppi, data.info, state.scoreThreshold, getNameFn);
+    const result = window.PPINetwork.buildPPINetworkSVG(resolvedGenes, data.ppi, data.info, state.scoreThreshold, getNameFn, sourceTaxid);
 
     container.innerHTML = '';
     if (result && result.svg) {
@@ -632,7 +632,7 @@ function renderHubGenesTable(nodes, container, taxid) {
 
         return `
                         <tr ${rowClass}>
-                            <td>
+                            <td data-pid="${esc(n.id)}" data-taxid="${esc(taxid)}">
                                 <div><strong>${esc(name)}</strong></div>
                                 <div style="font-size:0.75rem;color:var(--text-muted)">${esc(n.id)}</div>
                             </td>
@@ -670,7 +670,7 @@ function buildGOResults(resolvedGenes, sourceTaxid) {
         if (!goTerms || goTerms.length === 0) continue;
 
         html += `<div class="result-section">`;
-        html += `<div class="result-section-title"><span class="result-gene-badge">${esc(query)}</span></div>`;
+        html += `<div class="result-section-title"><span class="result-gene-badge" data-pid="${esc(proteinId)}" data-taxid="${esc(sourceTaxid)}">${esc(query)}</span></div>`;
 
         const grouped = {};
         for (const t of goTerms) {
@@ -750,7 +750,7 @@ function buildKEGGResults(resolvedGenes, sourceTaxid) {
         if (keggTerms.length === 0 && pathwayMatches.length === 0 && keggLikeTerms.length === 0) continue;
 
         html += `<div class="result-section">`;
-        html += `<div class="result-section-title"><span class="result-gene-badge">${esc(query)}</span>`;
+        html += `<div class="result-section-title"><span class="result-gene-badge" data-pid="${esc(proteinId)}" data-taxid="${esc(sourceTaxid)}">${esc(query)}</span>`;
         if (prefName !== query) html += ` → ${esc(prefName)}`;
         html += `</div>`;
 
@@ -1209,5 +1209,151 @@ function makeTableSortable(table) {
     // Store original index
     Array.from(tbody.querySelectorAll('tr')).forEach((tr, i) => tr.dataset.originalIndex = i);
 }
+
+// ===== Gene Tooltip =====
+const tooltipEl = document.getElementById('gene-tooltip');
+let tooltipTimer = null;
+
+function buildTooltipHTML(pid, taxid) {
+    const data = state.cache[taxid];
+    if (!data) return null;
+
+    const info = data.info?.[pid];
+    const name = info?.name || pid;
+    const annotation = info?.annotation || '';
+    const size = info?.size || '';
+    const goTerms = (data.go?.[pid] || []).slice(0, 4);
+    const pathwayNames = data.keggPathways?.pathways || {};
+
+    // KEGG gene_pathways is keyed by gene name, not protein ID — try multiple keys
+    let keggPaths = [];
+    if (data.keggPathways?.gene_pathways) {
+        const gp = data.keggPathways.gene_pathways;
+        if (gp[pid]) keggPaths = gp[pid];
+        else if (gp[name]) keggPaths = gp[name];
+        else if (data.aliases?.[pid]) {
+            for (const alias of data.aliases[pid]) {
+                if (gp[alias]) { keggPaths = gp[alias]; break; }
+            }
+        }
+    }
+
+    let html = `<div class="gene-tooltip-header">`;
+    html += `<span class="gene-tooltip-name">${esc(name)}</span>`;
+    if (name !== pid) html += `<span class="gene-tooltip-pid">${esc(pid)}</span>`;
+    if (size) html += `<span class="gene-tooltip-size">${esc(size)} aa</span>`;
+    html += `</div>`;
+
+    if (annotation) {
+        html += `<div class="gene-tooltip-annotation">${esc(annotation)}</div>`;
+    }
+
+    if (goTerms.length > 0) {
+        html += `<div class="gene-tooltip-section">`;
+        html += `<div class="gene-tooltip-section-title">GO Terms</div>`;
+        html += `<ul class="gene-tooltip-terms">`;
+        for (const t of goTerms) {
+            html += `<li><a href="https://amigo.geneontology.org/amigo/term/${encodeURIComponent(t.term)}" target="_blank" rel="noopener">${esc(t.term)}</a> ${esc(t.description)}</li>`;
+        }
+        html += `</ul></div>`;
+    }
+
+    if (keggPaths.length > 0) {
+        html += `<div class="gene-tooltip-section">`;
+        html += `<div class="gene-tooltip-section-title">KEGG Pathways</div>`;
+        html += `<ul class="gene-tooltip-terms">`;
+        for (const kp of keggPaths.slice(0, 3)) {
+            const cleanId = kp.replace(/^path:/, '');
+            const desc = pathwayNames[cleanId] || pathwayNames[kp] || cleanId;
+            html += `<li><a href="https://www.genome.jp/entry/${encodeURIComponent(cleanId)}" target="_blank" rel="noopener">${esc(cleanId)}</a> ${esc(desc)}</li>`;
+        }
+        html += `</ul></div>`;
+    }
+
+    // Reference links
+    html += `<div class="gene-tooltip-refs">`;
+    html += `<a href="https://www.uniprot.org/uniprot/${encodeURIComponent(pid)}" target="_blank" rel="noopener">UniProt</a>`;
+    html += `<a href="https://string-db.org/network/${encodeURIComponent(taxid + '.' + pid)}" target="_blank" rel="noopener">STRING</a>`;
+    html += `</div>`;
+
+    return html;
+}
+
+function showGeneTooltip(pid, taxid, event) {
+    if (!pid || !taxid) return;
+    clearTimeout(tooltipTimer);
+
+    tooltipTimer = setTimeout(() => {
+        const html = buildTooltipHTML(pid, taxid);
+        if (!html) return;
+
+        tooltipEl.innerHTML = html;
+        tooltipEl.hidden = false;
+
+        // Position near cursor, avoiding viewport overflow
+        const pad = 12;
+        const rect = tooltipEl.getBoundingClientRect();
+        let x = event.clientX + pad;
+        let y = event.clientY + pad;
+
+        // Measure after making visible but before showing
+        tooltipEl.style.left = x + 'px';
+        tooltipEl.style.top = y + 'px';
+        tooltipEl.classList.add('visible');
+
+        // Adjust if overflowing
+        const ttRect = tooltipEl.getBoundingClientRect();
+        if (ttRect.right > window.innerWidth - 8) {
+            x = event.clientX - ttRect.width - pad;
+        }
+        if (ttRect.bottom > window.innerHeight - 8) {
+            y = event.clientY - ttRect.height - pad;
+        }
+        tooltipEl.style.left = Math.max(4, x) + 'px';
+        tooltipEl.style.top = Math.max(4, y) + 'px';
+    }, 200);
+}
+
+function hideGeneTooltip() {
+    clearTimeout(tooltipTimer);
+    tooltipEl.classList.remove('visible');
+    tooltipTimer = setTimeout(() => {
+        tooltipEl.hidden = true;
+    }, 150);
+}
+
+// Event delegation for [data-pid] elements in results
+document.addEventListener('mouseover', (e) => {
+    // Don't hide if mouse enters the tooltip itself
+    if (tooltipEl.contains(e.target)) {
+        clearTimeout(tooltipTimer);
+        return;
+    }
+    const target = e.target.closest('[data-pid]');
+    if (target) {
+        const pid = target.dataset.pid;
+        const taxid = target.dataset.taxid;
+        showGeneTooltip(pid, taxid, e);
+    }
+});
+
+document.addEventListener('mouseout', (e) => {
+    const target = e.target.closest('[data-pid]');
+    if (target) {
+        // Check if mouse is moving to the tooltip
+        const related = e.relatedTarget;
+        if (related && tooltipEl.contains(related)) return;
+        hideGeneTooltip();
+    }
+});
+
+// Hide tooltip when leaving the tooltip itself
+tooltipEl.addEventListener('mouseleave', () => {
+    hideGeneTooltip();
+});
+
+// Expose for network.js
+window.showGeneTooltip = showGeneTooltip;
+window.hideGeneTooltip = hideGeneTooltip;
 
 document.addEventListener('DOMContentLoaded', init);
