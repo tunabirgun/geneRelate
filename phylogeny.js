@@ -301,17 +301,12 @@ function _showPhyloTooltip(tipData, event) {
         }
         html += '</ul></div>';
 
-        // Reference links — try to build links for the gene
+        // Reference links
         html += '<div class="gene-tooltip-refs">';
-        // eggNOG link for the orthogroup
-        if (tipData.ogId) {
-            html += '<a href="http://eggnog5.embl.de/#/app/results?target_nogs=' + encodeURIComponent(tipData.ogId) + '" target="_blank" rel="noopener">eggNOG</a>';
-        }
-        // STRING link if we have species taxid
         if (tipData.speciesTaxid && tipData.shortId) {
-            html += '<a href="https://string-db.org/network/' + encodeURIComponent(tipData.speciesTaxid + '.' + tipData.shortId) + '" target="_blank" rel="noopener">STRING</a>';
+            var stringTaxid = _eggNOGToStringTaxid[tipData.speciesTaxid] || tipData.speciesTaxid;
+            html += '<a href="https://string-db.org/network/' + encodeURIComponent(stringTaxid + '.' + tipData.shortId) + '" target="_blank" rel="noopener">STRING</a>';
         }
-        // UniProt search for the protein ID
         if (tipData.shortId) {
             html += '<a href="https://www.uniprot.org/uniprotkb?query=' + encodeURIComponent(tipData.shortId) + '" target="_blank" rel="noopener">UniProt</a>';
         }
@@ -349,13 +344,13 @@ function _showPhyloTooltip(tipData, event) {
 /**
  * Render a phylogenetic tree as SVG.
  * @param {Object} root - parsed Newick tree
- * @param {Object} opts - { queryGenes: Set, targetSpecies: Set, getSpeciesName: fn, title: string, members: [], ogId: string }
+ * @param {Object} opts - { queryGenes: Set, isTargetSpecies: fn, getSpeciesName: fn, title: string, members: [], ogId: string }
  * @returns {SVGElement}
  */
 function renderTreeSVG(root, opts) {
     opts = opts || {};
     const queryGenes = opts.queryGenes || new Set();
-    const targetSpecies = opts.targetSpecies || new Set();
+    const isTargetSpecies = opts.isTargetSpecies || (() => false);
     const getSpeciesName = opts.getSpeciesName || (() => '');
     const memberNames = opts.memberNames || {};
     const members = opts.members || [];
@@ -421,7 +416,7 @@ function renderTreeSVG(root, opts) {
         if (queryGenes.has(geneName)) {
             nodeColor = queryColor;
             nodeR = 5;
-        } else if (targetSpecies.has(speciesTaxid)) {
+        } else if (isTargetSpecies(speciesTaxid)) {
             nodeColor = targetColor;
             nodeR = 4;
         }
@@ -449,7 +444,7 @@ function renderTreeSVG(root, opts) {
             if (queryGenes.has(geneName)) {
                 textEl.setAttribute('font-weight', '700');
                 textEl.setAttribute('fill', queryColor);
-            } else if (targetSpecies.has(speciesTaxid)) {
+            } else if (isTargetSpecies(speciesTaxid)) {
                 textEl.setAttribute('fill', targetColor);
             }
 
@@ -470,7 +465,7 @@ function renderTreeSVG(root, opts) {
                 species: spName || speciesTaxid,
                 speciesTaxid: speciesTaxid,
                 isQuery: queryGenes.has(geneName),
-                isTarget: targetSpecies.has(speciesTaxid),
+                isTarget: isTargetSpecies(speciesTaxid),
                 branchLength: node.branchLength,
                 ogId: ogId
             };
@@ -603,6 +598,53 @@ function _findQueryTipNames(matchedId, members, newickStr, sourceTaxid) {
     return new Set([matchedId]); // fallback
 }
 
+// ===== eggNOG ↔ STRING Taxid Mapping =====
+
+/**
+ * Global cache: maps eggNOG species-level taxids to STRING strain-level taxids.
+ * eggNOG trees use species-level NCBI taxids (e.g., 5518 for F. graminearum),
+ * while STRING uses strain-level taxids (e.g., 229533 for F. graminearum PH-1).
+ * Built dynamically by matching member locus tags against tree tip names.
+ */
+var _eggNOGToStringTaxid = {};
+
+/**
+ * Build the eggNOG→STRING taxid mapping from orthogroup members and tree tips.
+ * For each member, we know its STRING taxid and locus tag name.
+ * For each tree tip, we know its eggNOG taxid and locus tag (with suffix).
+ * Matching them gives us the mapping.
+ */
+function _buildTaxidMapping(members, newickStr) {
+    if (!members || !newickStr) return;
+
+    // Extract tip names from Newick
+    var tipMatches = newickStr.match(/[\(,]([A-Za-z0-9_.]+):/g);
+    if (!tipMatches) return;
+    var tips = tipMatches.map(function(t) { return t.replace(/^[\(,]/, '').replace(/:$/, ''); });
+
+    // Build locus tag → eggNOG taxid from tips
+    var tipTagToEggNOG = {};
+    for (var i = 0; i < tips.length; i++) {
+        var tip = tips[i];
+        var dotIdx = tip.indexOf('.');
+        if (dotIdx < 0) continue;
+        var eggTaxid = tip.substring(0, dotIdx);
+        var tipTag = tip.substring(dotIdx + 1).replace(/[PT]\d+$/, ''); // strip P0/T0 suffix
+        tipTagToEggNOG[tipTag] = eggTaxid;
+    }
+
+    // Match member names (locus tags) to tip locus tags
+    for (var mi = 0; mi < members.length; mi++) {
+        var m = members[mi];
+        if (!m.name || !m.species) continue;
+        var cleanName = m.name.replace(/\.\d+$/, '');
+        var eggTaxid = tipTagToEggNOG[cleanName];
+        if (eggTaxid && eggTaxid !== m.species) {
+            _eggNOGToStringTaxid[eggTaxid] = m.species;
+        }
+    }
+}
+
 // ===== Tab Builder =====
 
 /**
@@ -647,14 +689,30 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
         return;
     }
 
+    // Species name lookup: resolves both STRING taxids and eggNOG taxids
     const getSpeciesName = function(taxid) {
         const sp = (window.state || {}).speciesList;
         if (!sp) return taxid;
-        const match = sp.find(function(s) { return s.taxid === taxid; });
-        return match ? match.compact_name : taxid;
+        // Try direct match (STRING taxid)
+        var match = sp.find(function(s) { return s.taxid === taxid; });
+        if (match) return match.compact_name;
+        // Try via eggNOG→STRING mapping
+        var stringTaxid = _eggNOGToStringTaxid[taxid];
+        if (stringTaxid) {
+            match = sp.find(function(s) { return s.taxid === stringTaxid; });
+            if (match) return match.compact_name;
+        }
+        return taxid;
     };
 
+    // Also resolve target species for eggNOG taxids
     const targetSet = new Set(targetTaxids || []);
+    const isTargetSpecies = function(eggNOGTaxid) {
+        if (targetSet.has(eggNOGTaxid)) return true;
+        var stringTaxid = _eggNOGToStringTaxid[eggNOGTaxid];
+        return stringTaxid ? targetSet.has(stringTaxid) : false;
+    };
+
     let html = '';
     const treeElements = []; // { containerId, svg, newick, ogId }
 
@@ -745,6 +803,11 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
             if (members[mi].name) memberNameMap[members[mi].gene] = members[mi].name;
         }
 
+        // Build eggNOG→STRING taxid mapping from this tree's members
+        if (newick) {
+            _buildTaxidMapping(members, newick);
+        }
+
         // Queue tree rendering
         if (newick) {
             treeElements.push({
@@ -753,7 +816,7 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
                 ogId: ogId,
                 matchedId: matchedId,
                 queryGenes: _findQueryTipNames(matchedId, members, newick, sourceTaxid),
-                targetSpecies: targetSet,
+                isTargetSpecies: isTargetSpecies,
                 getSpeciesName: getSpeciesName,
                 memberNames: memberNameMap,
                 members: members,
@@ -797,7 +860,7 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
 
         const svg = renderTreeSVG(tree, {
             queryGenes: te.queryGenes,
-            targetSpecies: te.targetSpecies,
+            isTargetSpecies: te.isTargetSpecies,
             getSpeciesName: te.getSpeciesName,
             memberNames: te.memberNames,
             members: te.members,
