@@ -1,6 +1,6 @@
 /**
  * geneRelate — Publication-Quality Plot Generation
- * SVG-based enrichment plots: horizontal bar chart and dot plot.
+ * SVG-based enrichment plots: bar chart, dot plot, and hierarchical clustering dendrogram.
  * Designed for academic publication standards.
  */
 
