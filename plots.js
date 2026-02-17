@@ -568,7 +568,8 @@ function layoutDendrogram(root, maxHeight, plotW, rowH) {
  * Terms are clustered by Jaccard similarity of their gene sets.
  */
 function createClusterTree(results, topN = 20, palette = 'Default', title = 'Enrichment Clustering') {
-    const data = results.filter(r => r.fdr <= 1).slice(0, topN);
+    // Filter to terms that have at least one gene (required for Jaccard distance)
+    const data = results.filter(r => r.fdr <= 1 && r.genes && r.genes.length > 0).slice(0, topN);
     if (data.length < 2) return null;
 
     const theme = document.documentElement.getAttribute('data-theme');
@@ -578,7 +579,7 @@ function createClusterTree(results, topN = 20, palette = 'Default', title = 'Enr
     const gridColor = theme === 'dark' ? '#333333' : '#e0e0e0';
     const bgColor = theme === 'dark' ? '#1a1a1a' : '#ffffff';
 
-    // Clustering
+    // Clustering using Jaccard distance on gene sets
     const distMatrix = computeJaccardDistanceMatrix(data);
     const tree = upgmaClustering(distMatrix);
     if (!tree) return null;
