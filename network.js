@@ -344,9 +344,6 @@ function renderNetworkViewer(nodes, edges, width, height, taxid) {
     // Pass initial transform state so handlers know current scale/translate
     setupInteraction(svg, container, translateX, translateY, scale, nodes, nodeElements, edgeElements);
 
-    // Draw Legend (Removed as per user request)
-    // drawLegendOverlay(svg, isDark, gid);
-
     return svg;
 }
 
@@ -500,7 +497,5 @@ function setupInteraction(svg, container, initX, initY, initScale, nodes, nodeEl
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
 }
-
-
 
 window.PPINetwork = { buildPPINetworkSVG };
