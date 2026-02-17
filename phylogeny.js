@@ -609,6 +609,12 @@ function _findQueryTipNames(matchedId, members, newickStr, sourceTaxid) {
 var _eggNOGToStringTaxid = {};
 
 /**
+ * Static NCBI taxid → scientific name mapping for all species in eggNOG v5.0 trees.
+ * Loaded once from data/phylogeny/taxid_names.json.
+ */
+var _taxidNames = null;
+
+/**
  * Build the eggNOG→STRING taxid mapping from orthogroup members and tree tips.
  * For each member, we know its STRING taxid and locus tag name.
  * For each tree tip, we know its eggNOG taxid and locus tag (with suffix).
@@ -714,18 +720,22 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
     }
 
     // Species name lookup: resolves both STRING taxids and eggNOG taxids
+    const taxidNames = (phyloData && phyloData.taxidNames) || {};
     const getSpeciesName = function(taxid) {
         const sp = (window.state || {}).speciesList;
-        if (!sp) return taxid;
-        // Try direct match (STRING taxid)
-        var match = sp.find(function(s) { return s.taxid === taxid; });
-        if (match) return match.compact_name;
-        // Try via eggNOG→STRING mapping
-        var stringTaxid = _eggNOGToStringTaxid[taxid];
-        if (stringTaxid) {
-            match = sp.find(function(s) { return s.taxid === stringTaxid; });
+        if (sp) {
+            // Try direct match (STRING taxid)
+            var match = sp.find(function(s) { return s.taxid === taxid; });
             if (match) return match.compact_name;
+            // Try via eggNOG→STRING mapping
+            var stringTaxid = _eggNOGToStringTaxid[taxid];
+            if (stringTaxid) {
+                match = sp.find(function(s) { return s.taxid === stringTaxid; });
+                if (match) return match.compact_name;
+            }
         }
+        // Fallback to static NCBI taxid→name mapping
+        if (taxidNames[taxid]) return taxidNames[taxid];
         return taxid;
     };
 
@@ -942,11 +952,15 @@ function exportNewick(ogId) {
 function exportPhylogenyCSV(resolvedGenes, sourceTaxid, targetTaxids, phyloData) {
     if (!phyloData || !phyloData.orthogroups) return alert('No phylogeny data to export.');
 
+    var taxidNames = (phyloData && phyloData.taxidNames) || {};
     var getSpeciesName = function(taxid) {
         var sp = (window.state || {}).speciesList;
-        if (!sp) return taxid;
-        var match = sp.find(function(s) { return s.taxid === taxid; });
-        return match ? match.compact_name : taxid;
+        if (sp) {
+            var match = sp.find(function(s) { return s.taxid === taxid; });
+            if (match) return match.compact_name;
+        }
+        if (taxidNames[taxid]) return taxidNames[taxid];
+        return taxid;
     };
 
     var headers = ['Gene', 'Protein ID', 'Orthogroup', 'Members', 'Species Represented', 'Missing Targets'];

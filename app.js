@@ -344,14 +344,15 @@ async function loadPhylogenyData() {
     if (state.phylogenyData) return state.phylogenyData;
     if (state._phyloLoadFailed) return null;
 
-    const [orthogroups, trees, meta] = await Promise.all([
+    const [orthogroups, trees, meta, taxidNames] = await Promise.all([
         fetchJSON('data/phylogeny/orthogroups.json'),
         fetchJSON('data/phylogeny/trees.json'),
         fetchJSON('data/phylogeny/metadata.json'),
+        fetchJSON('data/phylogeny/taxid_names.json'),
     ]);
 
     if (orthogroups && trees) {
-        state.phylogenyData = { orthogroups, trees, metadata: meta };
+        state.phylogenyData = { orthogroups, trees, metadata: meta, taxidNames: taxidNames || {} };
         renderDBVersions();
         return state.phylogenyData;
     }
