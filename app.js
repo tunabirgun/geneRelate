@@ -1319,10 +1319,13 @@ function showGeneTooltip(pid, taxid, event) {
 
 function hideGeneTooltip() {
     clearTimeout(tooltipTimer);
-    tooltipEl.classList.remove('visible');
+    // Delay before fading out — gives time to move cursor to the tooltip
     tooltipTimer = setTimeout(() => {
-        tooltipEl.hidden = true;
-    }, 150);
+        tooltipEl.classList.remove('visible');
+        tooltipTimer = setTimeout(() => {
+            tooltipEl.hidden = true;
+        }, 200);
+    }, 300);
 }
 
 // Event delegation for [data-pid] elements in results

@@ -327,7 +327,11 @@ function renderNetworkViewer(nodes, edges, width, height, taxid) {
             g.addEventListener('mouseenter', (e) => {
                 if (window.showGeneTooltip) window.showGeneTooltip(n.id, taxid, e);
             });
-            g.addEventListener('mouseleave', () => {
+            g.addEventListener('mouseleave', (e) => {
+                // Don't hide if mouse is moving to the tooltip
+                const related = e.relatedTarget;
+                const tooltip = document.getElementById('gene-tooltip');
+                if (related && tooltip && tooltip.contains(related)) return;
                 if (window.hideGeneTooltip) window.hideGeneTooltip();
             });
         }
