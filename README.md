@@ -19,7 +19,7 @@ geneRelate enables researchers to map orthologs, explore protein-protein interac
 - **Publication-Quality Plots** — Bar charts, dot plots, and hierarchical clustering dendrograms with 7 color palettes (Default, Viridis, Magma, Plasma, Blues, Reds, Greys)
 - **Hierarchical Clustering Tree** — UPGMA dendrogram clustering enriched terms by gene set overlap (Jaccard distance), similar to ShinyGO's Tree view
 - **Interactive Gene Tooltips** — Hover over any gene or protein ID in tables, network nodes, or phylogeny tree leaves to see functional annotation, GO terms, KEGG pathways, and direct links to UniProt, STRING, AmiGO, KEGG, and eggNOG
-- **Phylogeny Analysis** — Per-gene phylogenetic trees from eggNOG v5.0 pre-computed gene trees, mapped via STRING orthologous groups at the Fungi level. Query genes are highlighted in red and target species in blue, with interactive tooltips on each leaf node
+- **Phylogeny Analysis** — Per-gene phylogenetic trees from eggNOG v7 pre-computed protein family trees, mapped via STRING orthologous groups at the Fungi level. Query genes are highlighted in red and target species in blue, with interactive tooltips on each leaf node
 - **Phylogenetic Export Formats** — Newick, NEXUS (PAUP\*, MrBayes, FigTree), and PhyloXML (Archaeopteryx, ETE, forester) for compatibility with external phylogenetic analysis tools
 - **Multiple Export Formats** — CSV, PNG (high-resolution), SVG, and PDF
 - **Dark / Light Theme** — Persistent theme preference
@@ -75,14 +75,14 @@ Enriched terms can be visualized as a hierarchical clustering dendrogram (Tree v
 
 ### Phylogeny Analysis
 
-Gene trees are derived from eggNOG v5.0 pre-computed phylogenies at the Fungi level (taxonomy ID 4751). Orthologous group (NOG) assignments are obtained from STRING v12.0 hierarchical orthology data. The mapping pipeline:
+Gene trees are derived from eggNOG v7 pre-computed protein family phylogenies (Hernández-Plaza et al., 2026). Orthologous group (NOG) assignments are obtained from STRING v12.0 hierarchical orthology data. The mapping pipeline:
 
 1. For each protein, STRING provides eggNOG NOG assignments at the Fungi level (taxid 4751)
 2. Proteins sharing the same NOG ID are grouped into orthogroups
-3. STRING protein IDs are mapped to locus tags, then to eggNOG internal protein IDs
-4. Matching eggNOG group IDs are used to retrieve pre-computed gene trees (inferred via species tree reconciliation and maximum-likelihood methods)
+3. eggNOG v7 protein family trees are filtered for families with Fungi-level OGs
+4. STRING protein IDs are matched directly against eggNOG v7 tree tip labels (both use `taxid.UniProtID` format)
 
-The resulting dataset covers 14,952 orthogroups (257,283 genes) across 18 *Fusarium* species, with 9,524 gene trees available. Trees are rendered as rectangular cladograms with query genes highlighted in red and target species genes highlighted in blue. Query gene identification uses a multi-strategy matching algorithm (direct ID, protein ID, locus tag, alias-based, and pattern matching) to bridge the STRING-to-eggNOG ID format gap. Hovering over any leaf node shows species name, gene IDs, orthogroup, branch length, and links to eggNOG, STRING, and UniProt. Export is available in PNG, SVG, PDF, Newick, NEXUS, and PhyloXML formats.
+Trees are rendered as rectangular cladograms with query genes highlighted in red and target species genes highlighted in blue. Hovering over any leaf node shows species name, gene IDs, orthogroup, branch length, and links to eggNOG, STRING, and UniProt. Export is available in PNG, SVG, PDF, Newick, NEXUS, and PhyloXML formats.
 
 ### Synthetic Species Data
 
@@ -95,7 +95,7 @@ The resulting dataset covers 14,952 orthogroups (257,283 genes) across 18 *Fusar
 | STRING | v12.0 | https://string-db.org |
 | KEGG | Current | https://www.kegg.jp |
 | Gene Ontology | Current | https://geneontology.org |
-| eggNOG | v5.0 | http://eggnog5.embl.de |
+| eggNOG | v7 | https://eggnogdb.org |
 | FungiDB / VEuPathDB | Current | https://fungidb.org |
 
 ## Limitations
@@ -133,4 +133,4 @@ Then open `http://localhost:8000` in your browser.
 - Kanehisa, M., et al. (2023). KEGG for taxonomy-based analysis of pathways and genomes. *Nucleic Acids Research*, *51*(D1), D587–D592. https://doi.org/10.1093/nar/gkac963
 - The Gene Ontology Consortium. (2023). The Gene Ontology knowledgebase in 2023. *Genetics*, *224*(1), iyad031. https://doi.org/10.1093/genetics/iyad031
 - Amos, B., et al. (2022). VEuPathDB: The eukaryotic pathogen, vector and host bioinformatics resource center. *Nucleic Acids Research*, *50*(D1), D898–D911. https://doi.org/10.1093/nar/gkab929
-- Huerta-Cepas, J., et al. (2019). eggNOG 5.0: a hierarchical, functionally and phylogenetically annotated orthology resource based on 5090 organisms and 2502 viruses. *Nucleic Acids Research*, *47*(D1), D309–D314. https://doi.org/10.1093/nar/gky1085
+- Hernández-Plaza, A., et al. (2026). eggNOG v7: phylogeny-based orthology predictions and functional annotations. *Nucleic Acids Research*, *54*(D1), D402. https://doi.org/10.1093/nar/gkaf1249
