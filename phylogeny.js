@@ -549,7 +549,15 @@ function _findQueryTipNames(matchedId, members, newickStr, sourceTaxid) {
         if (tipId === proteinId) return new Set([tipNames[ti]]);
     }
 
-    return new Set([matchedId]); // fallback
+    // S3: match all tips from the source species (same taxid prefix)
+    // STRING IDs and eggNOG v7 tip labels may use different identifiers for the same
+    // protein (e.g., locus tag vs UniProt accession). When S1/S2 fail, highlight all
+    // tips from the query gene's species — they are co-orthologs in the same orthogroup.
+    var taxPrefix = sourceTaxid + '.';
+    var sourceTips = tipNames.filter(function(t) { return t.indexOf(taxPrefix) === 0; });
+    if (sourceTips.length > 0) return new Set(sourceTips);
+
+    return new Set([matchedId]); // last resort fallback
 }
 
 // ===== Taxid Name Resolution =====
