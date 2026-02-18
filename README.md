@@ -9,7 +9,7 @@ geneRelate enables researchers to map orthologs, explore protein-protein interac
 
 ## Features
 
-- **Cross-Species Alias Mapping** — Resolve gene names, locus tags, and protein IDs across 20 *Fusarium* species using pre-computed lookup tables
+- **Cross-Species Ortholog Mapping** — Identify orthologs across 20 *Fusarium* species using phylogeny-based NOG assignments from STRING/eggNOG, with alias-based name matching as fallback
 - **Protein-Protein Interaction (PPI) Tables** — Browse interactions from STRING v12.0 with configurable score thresholds (400–999)
 - **Interactive PPI Network** — Force-directed network visualization with zoom, pan, and drag. Hub genes identified by degree centrality
 - **GO Annotations** — Per-gene Gene Ontology terms (Biological Process, Molecular Function, Cellular Component)
@@ -55,7 +55,12 @@ geneRelate includes data for 20 *Fusarium* species sourced from STRING v12.0:
 
 ### Orthology Mapping
 
-Orthologs are mapped using pre-computed lookup tables derived from FungiDB and Ensembl Fungi. Gene resolution supports protein IDs, locus tags, preferred names, and aliases (case-insensitive).
+Cross-species ortholog identification uses a two-tier approach:
+
+1. **Primary — NOG-based orthology**: Each protein's eggNOG orthologous group (NOG) assignment is obtained from STRING v12.0 at the Fungi level (taxid 4751). Proteins sharing the same NOG ID are orthologs. This is phylogeny-based orthology derived from eggNOG's species tree reconciliation and maximum-likelihood methods.
+2. **Fallback — Alias matching**: For genes without NOG assignments, cross-species mapping falls back to name/alias matching using pre-computed lookup tables from FungiDB and Ensembl Fungi.
+
+Results are labeled by match type ("Ortholog" vs "Alias") so users can assess confidence. Gene resolution supports protein IDs, locus tags, preferred names, and aliases (case-insensitive).
 
 ### PPI Networks
 
@@ -100,7 +105,7 @@ Trees are rendered as rectangular cladograms with query genes highlighted in red
 
 ## Limitations
 
-- **Alias-based orthology** — Cross-species mapping uses name/alias matching, not reciprocal BLAST or dedicated orthology tools. It may miss orthologs with different names or produce false matches.
+- **Orthology coverage** — NOG-based ortholog mapping covers genes with STRING/eggNOG Fungi-level assignments. Genes without NOG assignments fall back to alias-based name matching, which may miss orthologs with different names or produce false matches.
 - **Synthetic species** — *F. culmorum* and *F. pseudograminearum* data assumes 1:1 correspondence with *F. graminearum*, which is not guaranteed biologically.
 - **KEGG coverage** — Only species with KEGG organism codes have pathway data. Some species will show zero KEGG annotations.
 - **Static data** — Pre-downloaded data does not auto-update. Periodic pipeline re-runs are needed when source databases release new versions.
@@ -109,7 +114,7 @@ Trees are rendered as rectangular cladograms with query genes highlighted in red
 
 1. Select a **source species** from the dropdown (or let auto-detection identify it from gene prefixes)
 2. Enter **gene names** (one per line or comma-separated) — supports locus tags (e.g., `FGSG_00362`), gene names (e.g., `TRI5`), or protein IDs
-3. Optionally select **target species** for cross-species alias lookup
+3. Optionally select **target species** for cross-species ortholog lookup
 4. Adjust the **PPI score threshold** (default: 700)
 5. Click **Analyze**
 
