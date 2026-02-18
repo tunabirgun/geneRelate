@@ -304,8 +304,7 @@ function _showPhyloTooltip(tipData, event) {
         // Reference links
         html += '<div class="gene-tooltip-refs">';
         if (tipData.speciesTaxid && tipData.shortId) {
-            var stringTaxid = _eggNOGToStringTaxid[tipData.speciesTaxid] || tipData.speciesTaxid;
-            html += '<a href="https://string-db.org/network/' + encodeURIComponent(stringTaxid + '.' + tipData.shortId) + '" target="_blank" rel="noopener">STRING</a>';
+            html += '<a href="https://string-db.org/network/' + encodeURIComponent(tipData.speciesTaxid + '.' + tipData.shortId) + '" target="_blank" rel="noopener">STRING</a>';
         }
         if (tipData.shortId) {
             html += '<a href="https://www.uniprot.org/uniprotkb?query=' + encodeURIComponent(tipData.shortId) + '" target="_blank" rel="noopener">UniProt</a>';
@@ -529,12 +528,9 @@ function renderTreeSVG(root, opts) {
 
 /**
  * Find tree tip names that correspond to the query gene.
- * Uses multiple strategies to bridge the STRING→eggNOG ID gap:
- *   1. Direct match of matchedId in tips
- *   2. Protein ID portion match
- *   3. Member name (cleaned) matches tip locus tag (cleaned)
- *   4. Alias-based: locus tags from aliases.json match tip locus tags
- *   5. FG-number pattern: FGxxxxx → FGSG_xxxxx
+ * eggNOG v7 trees use taxid.UniProtID format — same as STRING protein IDs,
+ * so direct matching (S1) should work in most cases.
+ * Fallback strategies are kept for edge cases.
  * @returns {Set} set of tree tip names that are the query gene
  */
 function _findQueryTipNames(matchedId, members, newickStr, sourceTaxid) {
@@ -543,137 +539,26 @@ function _findQueryTipNames(matchedId, members, newickStr, sourceTaxid) {
     if (!tipMatches) return new Set([matchedId]);
     var tipNames = tipMatches.map(function(t) { return t.replace(/^[\(,]/, '').replace(/:$/, ''); });
 
-    // S1: direct match
+    // S1: direct match (primary — works for eggNOG v7 trees)
     if (tipNames.indexOf(matchedId) >= 0) return new Set([matchedId]);
 
-    // Get member info and protein ID
-    var member = null;
-    for (var i = 0; i < members.length; i++) {
-        if (members[i].gene === matchedId) { member = members[i]; break; }
-    }
+    // S2: protein ID portion match (fallback)
     var proteinId = matchedId.indexOf('.') >= 0 ? matchedId.split('.').pop() : matchedId;
-
-    // S2: protein ID matches tip's ID portion
     for (var ti = 0; ti < tipNames.length; ti++) {
         var tipId = tipNames[ti].indexOf('.') >= 0 ? tipNames[ti].split('.').pop() : tipNames[ti];
         if (tipId === proteinId) return new Set([tipNames[ti]]);
     }
 
-    // S3: member name (cleaned) matches tip locus tag (cleaned)
-    if (member && member.name) {
-        var cleanName = member.name.replace(/\.\d+$/, '');
-        for (var ti = 0; ti < tipNames.length; ti++) {
-            var tipPart = tipNames[ti].indexOf('.') >= 0 ? tipNames[ti].split('.').pop() : tipNames[ti];
-            var tipClean = tipPart.replace(/[PT]\d+$/, '');
-            if (tipClean === cleanName) return new Set([tipNames[ti]]);
-        }
-    }
-
-    // S4: alias-based matching — use loaded species alias data
-    var cache = (window.state || {}).cache;
-    var aliasData = cache && cache[sourceTaxid] ? cache[sourceTaxid].aliases : null;
-    if (aliasData) {
-        var als = aliasData[proteinId] || [];
-        for (var ai = 0; ai < als.length; ai++) {
-            var alias = als[ai];
-            for (var ti = 0; ti < tipNames.length; ti++) {
-                var tipPart = tipNames[ti].indexOf('.') >= 0 ? tipNames[ti].split('.').pop() : tipNames[ti];
-                var tipClean = tipPart.replace(/[PT]\d+$/, '');
-                if (tipClean === alias) return new Set([tipNames[ti]]);
-            }
-        }
-    }
-
-    // S5: FG-number pattern (FGxxxxx → FGSG_xxxxx)
-    if (member && member.name) {
-        var numMatch = member.name.match(/^FG(\d{4,})/);
-        if (numMatch) {
-            var num = numMatch[1];
-            for (var ti = 0; ti < tipNames.length; ti++) {
-                if (tipNames[ti].indexOf('FGSG_' + num) >= 0) return new Set([tipNames[ti]]);
-            }
-        }
-    }
-
     return new Set([matchedId]); // fallback
 }
 
-// ===== eggNOG ↔ STRING Taxid Mapping =====
+// ===== Taxid Name Resolution =====
 
 /**
- * Global cache: maps eggNOG species-level taxids to STRING strain-level taxids.
- * eggNOG trees use species-level NCBI taxids (e.g., 5518 for F. graminearum),
- * while STRING uses strain-level taxids (e.g., 229533 for F. graminearum PH-1).
- * Built dynamically by matching member locus tags against tree tip names.
- */
-var _eggNOGToStringTaxid = {};
-
-/**
- * Static NCBI taxid → scientific name mapping for all species in eggNOG v5.0 trees.
+ * Static NCBI taxid → scientific name mapping for species in eggNOG trees.
  * Loaded once from data/phylogeny/taxid_names.json.
  */
 var _taxidNames = null;
-
-/**
- * Build the eggNOG→STRING taxid mapping from orthogroup members and tree tips.
- * For each member, we know its STRING taxid and locus tag name.
- * For each tree tip, we know its eggNOG taxid and locus tag (with suffix).
- * Matching them gives us the mapping.
- */
-function _buildTaxidMapping(members, newickStr) {
-    if (!members || !newickStr) return;
-
-    // Extract tip names from Newick
-    var tipMatches = newickStr.match(/[\(,]([A-Za-z0-9_.]+):/g);
-    if (!tipMatches) return;
-    var tips = tipMatches.map(function(t) { return t.replace(/^[\(,]/, '').replace(/:$/, ''); });
-
-    // Build locus tag → eggNOG taxid and protein ID → eggNOG taxid from tips
-    var tipTagToEggNOG = {};
-    var tipIdToEggNOG = {};
-    for (var i = 0; i < tips.length; i++) {
-        var tip = tips[i];
-        var dotIdx = tip.indexOf('.');
-        if (dotIdx < 0) continue;
-        var eggTaxid = tip.substring(0, dotIdx);
-        var tipPart = tip.substring(dotIdx + 1);
-        var tipTag = tipPart.replace(/[PT]\d+$/, ''); // strip P0/T0 suffix
-        tipTagToEggNOG[tipTag] = eggTaxid;
-        tipIdToEggNOG[tipPart] = eggTaxid;
-    }
-
-    // Match member names (locus tags) to tip locus tags
-    for (var mi = 0; mi < members.length; mi++) {
-        var m = members[mi];
-        if (!m.species) continue;
-
-        var eggTaxid = null;
-
-        if (m.name) {
-            var cleanName = m.name.replace(/\.\d+$/, '');
-            // Direct locus tag match
-            eggTaxid = tipTagToEggNOG[cleanName];
-            // FG-number pattern: FGxxxxx → FGSG_xxxxx (F. graminearum)
-            if (!eggTaxid) {
-                var fgMatch = cleanName.match(/^FG(\d{4,})/);
-                if (fgMatch) {
-                    eggTaxid = tipTagToEggNOG['FGSG_' + fgMatch[1]];
-                }
-            }
-        }
-
-        // Protein ID match: member gene "229533.I1RQ87" → try tip "I1RQ87" directly
-        if (!eggTaxid && m.gene) {
-            var protId = m.gene.indexOf('.') >= 0 ? m.gene.split('.').pop() : m.gene;
-            eggTaxid = tipIdToEggNOG[protId];
-            if (!eggTaxid) eggTaxid = tipTagToEggNOG[protId];
-        }
-
-        if (eggTaxid && eggTaxid !== m.species) {
-            _eggNOGToStringTaxid[eggTaxid] = m.species;
-        }
-    }
-}
 
 // ===== Tab Builder =====
 
@@ -719,32 +604,23 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
         return;
     }
 
-    // Species name lookup: resolves both STRING taxids and eggNOG taxids
+    // Species name lookup
+    // eggNOG v7 trees use strain-level taxids matching STRING, so direct lookup works
     const taxidNames = (phyloData && phyloData.taxidNames) || {};
     const getSpeciesName = function(taxid) {
         const sp = (window.state || {}).speciesList;
         if (sp) {
-            // Try direct match (STRING taxid)
             var match = sp.find(function(s) { return s.taxid === taxid; });
             if (match) return match.compact_name;
-            // Try via eggNOG→STRING mapping
-            var stringTaxid = _eggNOGToStringTaxid[taxid];
-            if (stringTaxid) {
-                match = sp.find(function(s) { return s.taxid === stringTaxid; });
-                if (match) return match.compact_name;
-            }
         }
         // Fallback to static NCBI taxid→name mapping
         if (taxidNames[taxid]) return taxidNames[taxid];
         return taxid;
     };
 
-    // Also resolve target species for eggNOG taxids
     const targetSet = new Set(targetTaxids || []);
-    const isTargetSpecies = function(eggNOGTaxid) {
-        if (targetSet.has(eggNOGTaxid)) return true;
-        var stringTaxid = _eggNOGToStringTaxid[eggNOGTaxid];
-        return stringTaxid ? targetSet.has(stringTaxid) : false;
+    const isTargetSpecies = function(taxid) {
+        return targetSet.has(taxid);
     };
 
     let html = '';
@@ -835,11 +711,6 @@ function buildPhylogenyTab(resolvedGenes, sourceTaxid, targetTaxids, phyloData) 
         var memberNameMap = {};
         for (var mi = 0; mi < members.length; mi++) {
             if (members[mi].name) memberNameMap[members[mi].gene] = members[mi].name;
-        }
-
-        // Build eggNOG→STRING taxid mapping from this tree's members
-        if (newick) {
-            _buildTaxidMapping(members, newick);
         }
 
         // Queue tree rendering
