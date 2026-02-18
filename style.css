@@ -41,6 +41,10 @@
   --tag-go-mf-text: #444444;
   --tag-go-cc-text: #333333;
   --tag-kegg-text: #444444;
+  --tag-nog: #e8f0e8;
+  --tag-nog-text: #2a5a2a;
+  --tag-alias: #f0ece8;
+  --tag-alias-text: #5a4a2a;
   --modal-overlay: rgba(0, 0, 0, 0.25);
 }
 
@@ -71,6 +75,10 @@
   --tag-go-mf-text: #aaaaaa;
   --tag-go-cc-text: #bbbbbb;
   --tag-kegg-text: #aaaaaa;
+  --tag-nog: rgba(100, 180, 100, 0.12);
+  --tag-nog-text: #8abb8a;
+  --tag-alias: rgba(180, 150, 100, 0.12);
+  --tag-alias-text: #bba87a;
   --modal-overlay: rgba(0, 0, 0, 0.55);
 }
 
@@ -736,6 +744,16 @@ body {
 .tag-kegg {
   background: var(--tag-kegg);
   color: var(--tag-kegg-text);
+}
+
+.tag-nog {
+  background: var(--tag-nog);
+  color: var(--tag-nog-text);
+}
+
+.tag-alias {
+  background: var(--tag-alias);
+  color: var(--tag-alias-text);
 }
 
 .alias-text {
