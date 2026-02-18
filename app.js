@@ -344,14 +344,33 @@ async function loadPhylogenyData() {
     if (state.phylogenyData) return state.phylogenyData;
     if (state._phyloLoadFailed) return null;
 
-    const [orthogroups, trees, meta, taxidNames] = await Promise.all([
+    const [orthogroups, meta, taxidNames] = await Promise.all([
         fetchJSON('data/phylogeny/orthogroups.json'),
-        fetchJSON('data/phylogeny/trees.json'),
         fetchJSON('data/phylogeny/metadata.json'),
         fetchJSON('data/phylogeny/taxid_names.json'),
     ]);
 
-    if (orthogroups && trees) {
+    if (!orthogroups || !meta) {
+        state._phyloLoadFailed = true;
+        return null;
+    }
+
+    // Load tree chunks listed in metadata (splits avoid GitHub's 100 MB file limit)
+    const chunkFiles = meta.tree_chunks || ['trees.json'];
+    const chunkPromises = chunkFiles.map(function(f) {
+        return fetchJSON('data/phylogeny/' + f);
+    });
+    const chunkResults = await Promise.all(chunkPromises);
+
+    // Merge all chunks into a single trees object
+    const trees = {};
+    for (let i = 0; i < chunkResults.length; i++) {
+        if (chunkResults[i]) {
+            Object.assign(trees, chunkResults[i]);
+        }
+    }
+
+    if (Object.keys(trees).length > 0) {
         state.phylogenyData = { orthogroups, trees, metadata: meta, taxidNames: taxidNames || {} };
         renderDBVersions();
         return state.phylogenyData;
