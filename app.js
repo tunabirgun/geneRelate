@@ -17,6 +17,8 @@ const state = {
     keggEnrichmentResults: null,
     enrichmentPlotType: 'bar',
     phylogenyData: null,
+    _orthogroupData: null,
+    _orthoLoadFailed: false,
 };
 window.state = state;
 
@@ -345,7 +347,7 @@ async function loadPhylogenyData() {
     if (state._phyloLoadFailed) return null;
 
     const [orthogroups, meta, taxidNames] = await Promise.all([
-        fetchJSON('data/phylogeny/orthogroups.json'),
+        state._orthogroupData || fetchJSON('data/phylogeny/orthogroups.json'),
         fetchJSON('data/phylogeny/metadata.json'),
         fetchJSON('data/phylogeny/taxid_names.json'),
     ]);
@@ -372,12 +374,32 @@ async function loadPhylogenyData() {
 
     if (Object.keys(trees).length > 0) {
         state.phylogenyData = { orthogroups, trees, metadata: meta, taxidNames: taxidNames || {} };
+        state._orthogroupData = null; // consolidated into phylogenyData
         renderDBVersions();
         return state.phylogenyData;
     }
 
     state._phyloLoadFailed = true;
     return null;
+}
+
+// ===== Lazy Orthogroup Loading (for Orthologs tab) =====
+async function loadOrthogroupData() {
+    if (state.phylogenyData) return state.phylogenyData.orthogroups;
+    if (state._orthogroupData) return state._orthogroupData;
+    if (state._orthoLoadFailed) return null;
+    try {
+        const orthogroups = await fetchJSON('data/phylogeny/orthogroups.json');
+        if (!orthogroups || !orthogroups.gene_to_og) {
+            state._orthoLoadFailed = true;
+            return null;
+        }
+        state._orthogroupData = orthogroups;
+        return orthogroups;
+    } catch (e) {
+        state._orthoLoadFailed = true;
+        return null;
+    }
 }
 
 // ===== Analysis =====
@@ -403,10 +425,15 @@ async function runAnalysis() {
         showLoading('Loading source species data...');
         await loadSpeciesData(sourceTaxid);
 
+        // Start orthogroup fetch in parallel with target species loading
+        const orthoPromise = loadOrthogroupData();
+
         for (let i = 0; i < targetTaxids.length; i++) {
             showLoading(`Loading target species ${i + 1}/${targetTaxids.length}...`);
             await loadSpeciesData(targetTaxids[i]);
         }
+
+        const orthogroups = await orthoPromise;
 
         const resolvedGenes = genes.map(gene => ({
             query: gene,
@@ -416,7 +443,7 @@ async function runAnalysis() {
         showLoading('Building results...');
         await new Promise(r => setTimeout(r, 50));
 
-        buildAliasResults(resolvedGenes, sourceTaxid, targetTaxids);
+        buildAliasResults(resolvedGenes, sourceTaxid, targetTaxids, orthogroups);
         buildPPIResults(resolvedGenes, sourceTaxid);
         buildPPINetwork(resolvedGenes, sourceTaxid);
         buildGOResults(resolvedGenes, sourceTaxid);
@@ -456,11 +483,11 @@ async function runAnalysis() {
     }
 }
 
-// ===== Alias Results =====
-function buildAliasResults(resolvedGenes, sourceTaxid, targetTaxids) {
+// ===== Ortholog Results =====
+function buildAliasResults(resolvedGenes, sourceTaxid, targetTaxids, orthogroups) {
     const container = $('#tab-aliases');
     if (targetTaxids.length === 0) {
-        container.innerHTML = '<p class="no-data">Select at least one target species to find cross-species aliases.</p>';
+        container.innerHTML = '<p class="no-data">Select at least one target species to find cross-species orthologs.</p>';
         return;
     }
 
@@ -472,8 +499,21 @@ function buildAliasResults(resolvedGenes, sourceTaxid, targetTaxids) {
         html += `<div class="result-section-title"><span class="result-gene-badge" data-pid="${esc(proteinId)}" data-taxid="${esc(sourceTaxid)}">${esc(query)}</span>`;
         const name = getPreferredName(proteinId, sourceTaxid);
         if (name !== query) html += ` → ${esc(name)}`;
+
+        // NOG-based ortholog lookup
+        let ogResult = null;
+        let ogMembers = [];
+        if (orthogroups && window.Phylogeny && window.Phylogeny.findOrthogroup) {
+            ogResult = window.Phylogeny.findOrthogroup(proteinId, sourceTaxid, { orthogroups });
+            if (ogResult) {
+                ogMembers = orthogroups.og_members[ogResult.ogId] || [];
+                html += ` <span class="tag tag-nog">${esc(ogResult.ogId)}</span>`;
+            }
+        }
+
         html += `</div>`;
 
+        // Alias-based search terms (fallback)
         const sourceData = state.cache[sourceTaxid];
         const sourceAliases = sourceData.aliases?.[proteinId] || [];
         const searchTerms = new Set(sourceAliases.map(a => a.toLowerCase()));
@@ -482,7 +522,7 @@ function buildAliasResults(resolvedGenes, sourceTaxid, targetTaxids) {
         if (prefName) searchTerms.add(prefName.toLowerCase());
 
         html += `<div class="table-responsive"><table class="result-table"><thead><tr>
-      <th>Target Species</th><th>Matching Protein</th><th>Preferred Name</th><th>Aliases</th>
+      <th>Target Species</th><th>Match Type</th><th>Matching Protein</th><th>Preferred Name</th><th>Aliases</th>
     </tr></thead><tbody>`;
 
         for (const targetTaxid of targetTaxids) {
@@ -493,26 +533,50 @@ function buildAliasResults(resolvedGenes, sourceTaxid, targetTaxids) {
             const targetName = getSpeciesName(targetTaxid);
             let foundMatch = false;
 
-            for (const term of searchTerms) {
-                const matches = targetData.nameLookup[term];
-                if (matches && matches.length > 0) {
-                    for (const matchPid of matches.slice(0, 3)) {
-                        const matchName = getPreferredName(matchPid, targetTaxid);
-                        const matchAliases = (targetData.aliases?.[matchPid] || []).slice(0, 5).join(', ');
-                        html += `<tr>
+            // PRIMARY: NOG-based ortholog matching
+            if (ogResult && ogMembers.length > 0) {
+                const targetMembers = ogMembers.filter(m => m.species === targetTaxid);
+                for (const member of targetMembers.slice(0, 5)) {
+                    const memberPid = member.gene.includes('.')
+                        ? member.gene.split('.').slice(1).join('.')
+                        : member.gene;
+                    const matchName = getPreferredName(memberPid, targetTaxid) || member.name || memberPid;
+                    const matchAliases = (targetData.aliases?.[memberPid] || []).slice(0, 5).join(', ');
+                    html += `<tr>
               <td>${italicSpeciesName(targetName)}</td>
+              <td><span class="tag tag-nog">Ortholog</span></td>
+              <td><code data-pid="${esc(memberPid)}" data-taxid="${esc(targetTaxid)}">${esc(memberPid)}</code></td>
+              <td data-pid="${esc(memberPid)}" data-taxid="${esc(targetTaxid)}">${esc(matchName)}</td>
+              <td class="alias-text">${esc(matchAliases)}</td>
+            </tr>`;
+                    foundMatch = true;
+                }
+            }
+
+            // FALLBACK: Alias-based matching (only if no NOG match)
+            if (!foundMatch) {
+                for (const term of searchTerms) {
+                    const matches = targetData.nameLookup[term];
+                    if (matches && matches.length > 0) {
+                        for (const matchPid of matches.slice(0, 3)) {
+                            const matchName = getPreferredName(matchPid, targetTaxid);
+                            const matchAliases = (targetData.aliases?.[matchPid] || []).slice(0, 5).join(', ');
+                            html += `<tr>
+              <td>${italicSpeciesName(targetName)}</td>
+              <td><span class="tag tag-alias">Alias</span></td>
               <td><code data-pid="${esc(matchPid)}" data-taxid="${esc(targetTaxid)}">${esc(matchPid)}</code></td>
               <td data-pid="${esc(matchPid)}" data-taxid="${esc(targetTaxid)}">${esc(matchName)}</td>
               <td class="alias-text">${esc(matchAliases)}</td>
             </tr>`;
-                        foundMatch = true;
+                            foundMatch = true;
+                        }
+                        break;
                     }
-                    break;
                 }
             }
 
             if (!foundMatch) {
-                html += `<tr><td>${italicSpeciesName(targetName)}</td><td colspan="3" class="gene-not-found">No matching alias found</td></tr>`;
+                html += `<tr><td>${italicSpeciesName(targetName)}</td><td colspan="4" class="gene-not-found">No ortholog or alias found</td></tr>`;
             }
         }
 
@@ -520,7 +584,7 @@ function buildAliasResults(resolvedGenes, sourceTaxid, targetTaxids) {
     }
 
     html += notFoundSummary(resolvedGenes);
-    container.innerHTML = html || '<p class="no-data">No alias results.</p>';
+    container.innerHTML = html || '<p class="no-data">No ortholog results.</p>';
     container.querySelectorAll('table').forEach(makeTableSortable);
     addGeneNavigation('#tab-aliases');
 }
