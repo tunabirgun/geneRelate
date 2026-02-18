@@ -993,6 +993,7 @@ function _downloadText(content, filename, mimeType) {
 window.Phylogeny = {
     parseNewick: parseNewick,
     buildPhylogenyTab: buildPhylogenyTab,
+    findOrthogroup: findOrthogroup,
     exportTree: exportTree,
     exportNewick: exportNewick,
     exportNexus: exportNexus,
