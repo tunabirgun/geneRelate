@@ -123,8 +123,7 @@ Trees are rendered as rectangular cladograms with query genes highlighted in red
 geneRelate is a fully static site. To run locally:
 
 ```bash
-# Any static file server works
-cd public
+# Any static file server works, run from the repository root
 python -m http.server 8000
 # or
 npx serve .
